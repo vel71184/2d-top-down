@@ -1,13 +1,16 @@
 import { assetUrl, loadImage } from "../../engine/assets";
 import { Camera } from "../../engine/camera";
 import { Scene } from "../../engine/scene";
-import type { Direction } from "../../engine/sprite";
+import { SpriteSheet, type Direction } from "../../engine/sprite";
 import type { Rect } from "../../engine/physics";
 import { TileMap, type MapObject } from "../../engine/tilemap";
 import { BattleScene, type BattleOptions, type BattleResult } from "../battle/BattleScene";
 import type { RPG } from "../context";
 import { Player } from "../entities/Player";
+import { ChoiceScene } from "./ChoiceScene";
+import { GameOverScene } from "./GameOverScene";
 import { MenuScene } from "./MenuScene";
+import { ShopScene } from "./ShopScene";
 import { DialogueBox } from "../ui/DialogueBox";
 
 const FADE_SPEED = 4; // full fade in 0.25s
@@ -16,6 +19,13 @@ const DEFAULT_ENCOUNTER_RATE = 0.1; // chance per tile walked inside a zone
 const DEFAULT_MIN_STEPS = 4; // tiles of grace after each battle
 
 type Fade = { dir: 1 | -1; alpha: number; onBlack?: () => Promise<void> };
+
+/** A map object drawn as a character (any object with a `sprite` property: npc, shop, inn...). */
+interface Actor {
+  obj: MapObject;
+  sheet: SpriteSheet;
+  facing: Direction;
+}
 
 /** A visible enemy placed on the map (object Class "enemy"). */
 interface MapEnemy {
@@ -43,6 +53,7 @@ export class OverworldScene extends Scene {
   private error: string | null = null;
 
   private enemies: MapEnemy[] = [];
+  private actors: Actor[] = [];
   /** An enemy you ran from (or lost to) can't re-trigger until you step off it. */
   private ignoreEnemy: MapEnemy | null = null;
   /** Tiles walked inside encounter zones since the last battle. */
@@ -53,25 +64,40 @@ export class OverworldScene extends Scene {
   private time = 0;
   private readonly noEncounters = new URLSearchParams(location.search).has("noencounters");
 
-  constructor(private rpg: RPG, private startMap: string, private startSpawn: string) {
+  constructor(
+    private rpg: RPG,
+    private startMap: string,
+    private startSpawn: string,
+    /** Exact start position (when loading a save) instead of a spawn point. */
+    private startPos?: { x: number; y: number; facing: Direction },
+  ) {
     super(rpg.game);
     const leader = rpg.state.party[0];
     this.player = new Player(rpg.sprites.get(leader.def.sprite)!);
   }
 
   async enter(): Promise<void> {
-    await this.loadMap(this.startMap, this.startSpawn);
+    await this.loadMap(this.startMap, this.startSpawn, undefined, this.startPos);
   }
 
-  private async loadMap(name: string, spawnName: string, facing?: Direction): Promise<void> {
+  /** Where the player is, for saving. */
+  position(): { map: string; x: number; y: number; facing: Direction } {
+    return { map: this.mapName, ...this.player.anchor, facing: this.player.facing };
+  }
+
+  private async loadMap(name: string, spawnName: string, facing?: Direction, pos?: { x: number; y: number; facing: Direction }): Promise<void> {
     try {
       const map = await TileMap.load(assetUrl(`assets/maps/${name}.tmj`));
-      const spawn = map.findObject("spawn", spawnName) ?? map.findObject("spawn");
-      if (!spawn) throw new Error(`Map "${name}" has no spawn object (Class "spawn").`);
       this.map = map;
       this.mapName = name;
-      const c = center(spawn);
-      this.player.placeAt(c.x, c.y, map.tileW, (spawn.props.facing as Direction | undefined) ?? facing);
+      if (pos) {
+        this.player.placeAt(pos.x, pos.y, map.tileW, pos.facing);
+      } else {
+        const spawn = map.findObject("spawn", spawnName) ?? map.findObject("spawn");
+        if (!spawn) throw new Error(`Map "${name}" has no spawn object (Class "spawn").`);
+        const c = center(spawn);
+        this.player.placeAt(c.x, c.y, map.tileW, (spawn.props.facing as Direction | undefined) ?? facing);
+      }
       this.doorArmed = false;
       this.error = null;
       this.encounterSteps = 0;
@@ -79,10 +105,26 @@ export class OverworldScene extends Scene {
       this.lastDistance = this.player.distance;
       this.ignoreEnemy = null;
       this.enemies = await this.loadEnemies(map, name);
+      this.actors = await this.loadActors(map);
     } catch (e) {
       console.error(e);
       this.error = e instanceof Error ? e.message : String(e);
     }
+  }
+
+  private async loadActors(map: TileMap): Promise<Actor[]> {
+    const out: Actor[] = [];
+    for (const obj of map.objects) {
+      const name = obj.props.sprite;
+      if (typeof name !== "string" || obj.type === "enemy") continue;
+      let sheet = this.rpg.sprites.get(name);
+      if (!sheet) {
+        sheet = await SpriteSheet.load(assetUrl(`assets/sprites/${name}.json`));
+        this.rpg.sprites.set(name, sheet);
+      }
+      out.push({ obj, sheet, facing: (obj.props.facing as Direction | undefined) ?? "down" });
+    }
+    return out;
   }
 
   private async loadEnemies(map: TileMap, mapName: string): Promise<MapEnemy[]> {
@@ -103,6 +145,7 @@ export class OverworldScene extends Scene {
   update(dt: number): void {
     const input = this.game.input;
     this.time += dt;
+    this.rpg.state.playTime += dt;
 
     if (this.flash) {
       this.flash.t += dt;
@@ -142,11 +185,12 @@ export class OverworldScene extends Scene {
     }
 
     if (input.pressed("menu") && !this.fade) {
-      void this.game.scenes.push(new MenuScene(this.rpg));
+      void this.game.scenes.push(new MenuScene(this.rpg, () => this.position()));
       return;
     }
 
-    this.player.update(dt, input, map, this.enemies.map((e) => enemyBox(e.obj, map.tileW)));
+    const blockers = [...this.enemies, ...this.actors].map((e) => enemyBox(e.obj, map.tileW));
+    this.player.update(dt, input, map, blockers);
     const moved = this.player.distance - this.lastDistance;
     this.lastDistance = this.player.distance;
 
@@ -192,8 +236,17 @@ export class OverworldScene extends Scene {
     const p = this.player.facingPoint();
     const enemy = this.enemies.find((e) => p.x >= e.obj.x && p.x < e.obj.x + e.obj.width && p.y >= e.obj.y && p.y < e.obj.y + e.obj.height);
     if (enemy) return this.engage(enemy);
-    const target = map.objectsAt(p.x, p.y).find((o) => ["sign", "npc", "battle"].includes(o.type));
+    const target = map.objectsAt(p.x, p.y).find((o) => ["sign", "npc", "battle", "shop", "inn"].includes(o.type));
     if (!target) return;
+    // Characters turn to face you when you talk to them.
+    const actor = this.actors.find((a) => a.obj === target);
+    if (actor) actor.facing = ({ up: "down", down: "up", left: "right", right: "left" } as const)[this.player.facing];
+    if (target.type === "shop") {
+      const stock = String(target.props.items ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+      void this.game.scenes.push(new ShopScene(this.rpg, target.name || "Shop", stock, String(target.props.text ?? "Welcome!")));
+      return;
+    }
+    if (target.type === "inn") return this.inn(target);
     if (target.type === "battle") {
       const fight = () => this.startBattle(String(target.props.enemies ?? "slime").split(",").map((s) => s.trim()), {
         canFlee: target.props.canFlee !== false,
@@ -207,6 +260,32 @@ export class OverworldScene extends Scene {
     const text = String(target.props.text ?? "...");
     const speaker = target.type === "npc" ? target.name || undefined : undefined;
     this.dialogue = new DialogueBox(text.split("|"), speaker);
+  }
+
+  /** Inn: pay to fully restore the party. */
+  private inn(obj: MapObject): void {
+    const price = Number(obj.props.price ?? 10);
+    const state = this.rpg.state;
+    const speaker = obj.name || undefined;
+    void this.game.scenes.push(
+      new ChoiceScene(this.game, `${String(obj.props.text ?? "Rest for the night?")} (${price} gold)`, ["Yes", "No"], (i) => {
+        if (i !== 0) return;
+        if (state.gold < price) {
+          this.dialogue = new DialogueBox(["You don't have enough gold."], speaker);
+          return;
+        }
+        state.gold -= price;
+        this.fade = {
+          dir: 1,
+          alpha: 0,
+          onBlack: async () => {
+            state.restoreParty(this.rpg.db);
+            await new Promise((r) => setTimeout(r, 400));
+            this.dialogue = new DialogueBox(["You feel well rested. HP and MP restored!"], speaker);
+          },
+        };
+      }),
+    );
   }
 
   /** Starts a fight with a visible map enemy (after its line of dialogue, if any). */
@@ -256,7 +335,10 @@ export class OverworldScene extends Scene {
       onBlack: () =>
         this.game.scenes.push(
           new BattleScene(this.rpg, enemyIds, options, (result: BattleResult) => {
-            if (result === "defeat") this.rpg.state.restoreParty();
+            if (result === "defeat") {
+              void this.game.scenes.push(new GameOverScene(this.rpg));
+              return;
+            }
             this.encounterSteps = 0;
             this.encounterDist = 0;
             this.game.input.reset();
@@ -282,14 +364,16 @@ export class OverworldScene extends Scene {
       map.draw(world, this.cam, false);
       // Characters back-to-front, so whoever is lower on screen is drawn in front.
       const playerFeet = this.player.body.y + this.player.body.h;
-      const sorted = [...this.enemies].sort((a, b) => a.obj.y + a.obj.height - (b.obj.y + b.obj.height));
+      const things: (MapEnemy | Actor)[] = [...this.enemies, ...this.actors];
+      things.sort((a, b) => a.obj.y + a.obj.height - (b.obj.y + b.obj.height));
       let playerDrawn = false;
-      for (const e of sorted) {
+      for (const e of things) {
         if (!playerDrawn && e.obj.y + e.obj.height > playerFeet) {
           this.player.render(world, this.cam);
           playerDrawn = true;
         }
-        this.drawEnemy(world, e, map.tileW);
+        if ("sheet" in e) this.drawActor(world, e);
+        else this.drawEnemy(world, e, map.tileW);
       }
       if (!playerDrawn) this.player.render(world, this.cam);
       map.draw(world, this.cam, true);
@@ -325,6 +409,13 @@ export class OverworldScene extends Scene {
       ui.fillText("Map error:", 14, 14);
       ui.fillText(this.error.slice(0, 80), 14, 28);
     }
+  }
+
+  private drawActor(ctx: CanvasRenderingContext2D, a: Actor): void {
+    const o = a.obj;
+    const x = Math.round(o.x + o.width / 2 - a.sheet.frameW / 2 - this.cam.x);
+    const y = Math.round(o.y + o.height - a.sheet.frameH - this.cam.y);
+    a.sheet.draw(ctx, a.facing, 0, x, y);
   }
 
   private drawEnemy(ctx: CanvasRenderingContext2D, e: MapEnemy, tile: number): void {

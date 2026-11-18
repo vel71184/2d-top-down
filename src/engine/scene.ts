@@ -40,6 +40,11 @@ export class SceneStack {
     await this.push(scene);
   }
 
+  /** Removes every scene (e.g. returning to the title screen). */
+  clear(): void {
+    while (this.stack.length) this.pop();
+  }
+
   update(dt: number): void {
     this.top?.update(dt);
   }

@@ -2,6 +2,7 @@ import { assetUrl, loadImage } from "../../engine/assets";
 import { Scene } from "../../engine/scene";
 import type { RPG } from "../context";
 import type { TargetType } from "../data";
+import { gainXp, memberStats, skillsOf } from "../party";
 import { Menu, type MenuItem } from "../ui/Menu";
 import { COLORS, drawPanel, font, outlinedText } from "../ui/theme";
 import { Battler } from "./Battler";
@@ -96,7 +97,8 @@ export class BattleScene extends Scene {
 
     for (const m of state.party) {
       const d = m.def;
-      this.battlers.push(new Battler("party", d.name, d.stats, m.hp, m.mp, d.skills, m, undefined, sprites.get(d.sprite)));
+      const stats = memberStats(db, m); // level + equipment
+      this.battlers.push(new Battler("party", d.name, stats, m.hp, m.mp, skillsOf(db, m), m, undefined, sprites.get(d.sprite)));
     }
     const counts = new Map<string, number>();
     for (const id of this.enemyIds) counts.set(id, (counts.get(id) ?? 0) + 1);
@@ -118,6 +120,7 @@ export class BattleScene extends Scene {
 
   update(dt: number): void {
     this.time += dt;
+    this.rpg.state.playTime += dt;
     this.fade = Math.max(0, Math.min(1, this.fade + this.fadeDir * FADE_SPEED * dt));
     this.updateVisuals(dt);
 
@@ -192,7 +195,7 @@ export class BattleScene extends Scene {
       this.commandMenu = null;
       return;
     }
-    const hasItems = this.rpg.state.inventory.size > 0;
+    const hasItems = this.usableItems().length > 0;
     const items: MenuItem[] = [
       { label: "Attack" },
       { label: "Skill", disabled: b.skills.length === 0 },
@@ -230,7 +233,7 @@ export class BattleScene extends Scene {
           this.mode = { m: "skill" };
           break;
         case 2:
-          this.listIds = [...state.inventory.keys()];
+          this.listIds = this.usableItems();
           this.listMenu = this.placeMenu(new Menu(
             this.listIds.map((id) => ({ label: db.items[id].name, right: `×${state.itemCount(id)}`, help: db.items[id].desc })),
             0, 0, 0, 0, 1, 17,
@@ -278,6 +281,11 @@ export class BattleScene extends Scene {
       if (nav === "down" || nav === "right") mode.index = (mode.index + 1) % pool.length;
       if (input.pressed("confirm")) this.commit(mode.make(multi ? pool : [pool[mode.index]]));
     }
+  }
+
+  /** Consumable items in the bag (equipment is managed in the menu). */
+  private usableItems(): string[] {
+    return [...this.rpg.state.inventory.keys()].filter((id) => this.rpg.db.items[id]);
   }
 
   private beginTarget(type: TargetType, back: "command" | "skill" | "item", make: (t: Battler[]) => Action): void {
@@ -418,10 +426,21 @@ export class BattleScene extends Scene {
       const xp = this.enemies.reduce((s, b) => s + (b.enemy?.xp ?? 0), 0);
       const gold = this.enemies.reduce((s, b) => s + (b.enemy?.gold ?? 0), 0);
       this.rpg.state.gold += gold;
-      for (const b of this.party) if (b.alive && b.member) b.member.xp += xp;
-      this.endWith("victory", ["Victory!", `Gained ${xp} XP`, `Found ${gold} gold`]);
+      const lines = ["Victory!", `Gained ${xp} XP  ·  Found ${gold} gold`];
+      for (const b of this.party) {
+        const m = b.member;
+        if (!m) continue;
+        // Sync HP/MP first so level-up gains are added on top, then copy back.
+        m.hp = b.hp;
+        m.mp = b.mp;
+        lines.push(...gainXp(this.rpg.db, m, xp));
+        b.stats = memberStats(this.rpg.db, m);
+        b.hp = m.hp;
+        b.mp = m.mp;
+      }
+      this.endWith("victory", lines);
     } else if (this.party.every((b) => !b.alive)) {
-      this.endWith("defeat", ["Your party has fallen...", "(You'll wake up back where you were, fully healed.)"]);
+      this.endWith("defeat", ["Your party has fallen..."]);
     }
   }
 
@@ -702,15 +721,17 @@ export class BattleScene extends Scene {
   }
 
   private drawResult(ctx: CanvasRenderingContext2D, W: number): void {
-    const w = Math.min(W - 40, 260), h = 30 + this.resultLines.length * 16;
-    const x = (W - w) / 2, y = (this.panelTop - h) / 2 + 4;
+    // Level-ups can add several lines; tighten the spacing so it still fits above the panel.
+    const lh = this.resultLines.length > 5 ? 13 : 16;
+    const w = Math.min(W - 40, 280), h = 30 + this.resultLines.length * lh;
+    const x = (W - w) / 2, y = Math.max(4, (this.panelTop - h) / 2 + 4);
     drawPanel(ctx, x, y, w, h);
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     this.resultLines.forEach((line, i) => {
       ctx.font = font(i === 0 ? 14 : 10, i === 0);
       ctx.fillStyle = i === 0 ? COLORS.accent : COLORS.text;
-      ctx.fillText(line, W / 2, y + 14 + i * 16);
+      ctx.fillText(line, W / 2, y + 14 + i * lh);
     });
     if (Math.floor(this.time * 2) % 2 === 0) {
       ctx.font = font(9);

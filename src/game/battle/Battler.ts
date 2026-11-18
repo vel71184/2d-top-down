@@ -28,7 +28,8 @@ export class Battler {
   constructor(
     readonly side: Side,
     readonly name: string,
-    readonly stats: Stats,
+    /** Max HP/MP and other stats (refreshed on level-up). */
+    public stats: Stats,
     hp: number,
     mp: number,
     readonly skills: string[],

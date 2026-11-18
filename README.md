@@ -3,7 +3,7 @@
 A top-down adventure RPG for Android, with exploration and party-based turn-based battles.
 It's written in TypeScript with HTML5 Canvas and wrapped as an Android app with [Capacitor](https://capacitorjs.com).
 
-**Status:** stage 3 of 5. You can explore maps, go through doors, read signs, run into random encounters and visible enemies, and fight turn-based battles with a party of 3.
+**Status:** stage 4 of 5. Explore maps, fight random encounters and visible enemies in turn-based battles, level up, buy and equip gear, rest at the inn, and save your progress.
 
 ## Running it
 
@@ -37,12 +37,16 @@ To build it locally instead, install Android Studio, then run `npm run android:s
 
 ## Menu
 
+The game starts on a title screen: **Continue** (most recent save), **New Game** or **Load Game**.
+
 Press **☰** (top-right), **Start** or **Y** (top face button) while walking around:
 - **Items:** use Potions, Ethers and Revive Tonics on your party.
-- **Status:** a character's stats and skills.
+- **Equip:** change weapon, armor and accessory. Stat changes are previewed (green up, red down).
+- **Status:** level, XP to the next level, stats, equipment and skills.
 - **Settings:** battle gauges (Wait or Active), and which controller button confirms. Settings are remembered on the device.
+- **Save:** 3 slots, saved on the device. You can save anywhere. Saves survive app updates, but uninstalling the app deletes them.
 
-Equipment and saving come in stage 4.
+If the whole party falls in battle, it's **Game Over** and you return to the title screen, so save often.
 
 ## Making maps (Tiled)
 
@@ -61,6 +65,9 @@ Steps for a new map:
 | `door` | anything | `map` (target map name), `spawn` (spawn name there) | Walking onto it moves the player to another map |
 | `sign` | anything | `text`, with pages separated by `\|` | A to read |
 | `npc` | speaker name | `text` | Like a sign, but shows the speaker's name (NPC sprites come later) |
+| `shop` | shop name | `items` (comma list of item/equipment ids), `text` (greeting) | Interact to buy and sell |
+| `inn` | innkeeper name | `price`, `text` | Interact to rest: full HP/MP for the price |
+| any of the above | | `sprite` (a sheet in `assets/sprites`, e.g. `merchant`), `facing` | Draws the object as a character, who turns to face you when you talk. Characters are solid |
 | `battle` | anything | `enemies` (e.g. `slime,slime,bat`), `text` (optional), `canFlee` (bool, default true) | Interact to start a fight, after showing `text` if set |
 | `enemy` | speaker name (optional) | `enemies` (e.g. `goblin,slime`), `text` (optional), `canFlee` (bool, default true), `image` (optional, file in `assets/enemies`), `size` (tiles tall, default 1) | A visible enemy. It's solid; bumping into it or pressing A starts the fight. Once beaten it stays gone |
 | `encounter` | anything | `table` (name in `encounters.json`), `rate` (chance per tile walked, default 0.1), `minSteps` (grace tiles after a fight, default 4) | Random-battle zone |
@@ -79,15 +86,16 @@ All content is in `public/data/`:
 
 | File | What's in it |
 |---|---|
-| `characters.json` | Party members (stats, skills, sprite), the starting party and starting items |
+| `characters.json` | Party members: level-1 `stats`, `growth` per level, starting `skills`, skills to `learn` at levels (`{"5": "thunder"}`), starting `equip`; plus the starting party, items and gold |
+| `equipment.json` | Weapons, armor and accessories: `slot`, stat bonuses, `price`, and `users` (who can equip it; leave out for everyone) |
 | `enemies.json` | Enemies (stats, XP and gold rewards, weaknesses and resistances, which skills they use and how often) |
 | `skills.json` | Skills: `physical`, `magic` or `heal`; power (100 = normal attack); MP cost; target; optional element |
-| `items.json` | Items and their effects (`hp`, `mp`, `revive`) |
+| `items.json` | Items, their effects (`hp`, `mp`, `revive`) and `price` |
 | `encounters.json` | Random-encounter tables: enemy groups with weights (higher = more common) |
 
 Targets are `enemy`, `all_enemies`, `ally`, `all_allies`, `self` or `ally_dead`, always seen from the user's side.
 The game checks for unknown IDs on startup and shows an error naming the bad entry.
-Damage formulas are at the top of `src/game/battle/rules.ts`.
+Damage formulas are at the top of `src/game/battle/rules.ts`; the XP curve and level-up rules are in `src/game/party.ts`. Shops sell items back for half price.
 
 ## Swapping art ("skins")
 
@@ -114,7 +122,7 @@ tools/        content helper scripts
 1. ✅ Exploration: movement, Tiled maps, collision, camera, doors, signs, touch controls
 2. ✅ Battles: party of 3 vs enemies, Attack/Skill/Item/Defend/Run, turn gauges, weaknesses
 3. ✅ Encounters: random encounters in zones, visible enemies on the map
-4. Progression: XP, levels, equipment, inventory, saving
+4. ✅ Progression: levels and skills, equipment, shops and inn, saving, title and game over
 5. NPCs and dialogue, menus, shops, audio and polish
 
 ## Google Play notes (only needed if you publish)

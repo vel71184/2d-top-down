@@ -237,6 +237,9 @@ const PALETTES = {
   aren: { skin: "#f1c79a", hair: "#5a3a1e", tunic: "#3a6fd0", tunicD: "#28509c", boot: "#3b2a1a" },
   lyra: { skin: "#f6d3b3", hair: "#e0b44a", tunic: "#8a46b8", tunicD: "#62308a", boot: "#4a2a5a", hat: "#4a2a7a" },
   bram: { skin: "#d9a57a", hair: "#2a2a2a", tunic: "#8a909c", tunicD: "#5e6470", boot: "#3a3a44", helmet: "#a9b0bc" },
+  // townsfolk
+  merchant: { skin: "#e8b98c", hair: "#7a4a20", tunic: "#2f8a5a", tunicD: "#1f6a42", boot: "#3b2a1a" },
+  innkeeper: { skin: "#f1c79a", hair: "#b8b8c0", tunic: "#b0483a", tunicD: "#7a3026", boot: "#3b2a1a" },
 };
 function drawChar(img, ox, oy, dir, frame, P) {
   const step = frame === 1 ? 1 : frame === 3 ? -1 : 0;

@@ -1,5 +1,5 @@
 {
-  "potion": { "name": "Potion",       "desc": "Restores 60 HP.",                "target": "ally",      "effect": { "hp": 60 } },
-  "ether":  { "name": "Ether",        "desc": "Restores 20 MP.",                "target": "ally",      "effect": { "mp": 20 } },
-  "revive": { "name": "Revive Tonic", "desc": "Revives a fallen ally (50% HP).", "target": "ally_dead", "effect": { "revive": 0.5 } }
+  "potion": {"name": "Potion", "desc": "Restores 60 HP.", "price": 25, "target": "ally", "effect": {"hp": 60}},
+  "ether": {"name": "Ether", "desc": "Restores 20 MP.", "price": 70, "target": "ally", "effect": {"mp": 20}},
+  "revive": {"name": "Revive Tonic", "desc": "Revives a fallen ally (50% HP).", "price": 150, "target": "ally_dead", "effect": {"revive": 0.5}}
 }

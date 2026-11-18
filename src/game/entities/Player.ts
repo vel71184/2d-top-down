@@ -29,6 +29,11 @@ export class Player {
     return this.body.y + this.body.h / 2;
   }
 
+  /** The point placeAt() would need to put the player back exactly here (for saving). */
+  get anchor(): { x: number; y: number } {
+    return { x: this.cx, y: this.body.y + this.body.h + Math.max(1, this.tile / 16) - this.tile / 2 };
+  }
+
   /** Places the player on the tile centred on (x, y), feet near the bottom of the tile. */
   placeAt(x: number, y: number, tileSize: number, facing?: Direction): void {
     this.tile = tileSize;
