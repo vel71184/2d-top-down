@@ -27,7 +27,14 @@ export class ShopScene extends Scene {
   private mode: "main" | "buy" | "sell" = "main";
   private message: { text: string; t: number } | null = null;
 
-  constructor(private rpg: RPG, private shopName: string, private stock: string[], private greeting: string) {
+  constructor(
+    private rpg: RPG,
+    private shopName: string,
+    private stock: string[],
+    private greeting: string,
+    /** Everything costs nothing (debug shop). */
+    private free = false,
+  ) {
     super(rpg.game);
   }
 
@@ -63,7 +70,7 @@ export class ShopScene extends Scene {
     const id = this.listIds[r.index];
     const keep = this.list!.cursor;
     if (this.mode === "buy") {
-      const price = thingPrice(db, id);
+      const price = this.buyPrice(id);
       state.gold -= price;
       state.addItem(id);
       this.say(`Bought ${thingName(db, id)}.`);
@@ -87,13 +94,17 @@ export class ShopScene extends Scene {
     this.list = new Menu(
       this.listIds.map((id) => ({
         label: thingName(db, id),
-        right: `${thingPrice(db, id)} G`,
-        disabled: thingPrice(db, id) > state.gold,
+        right: this.free ? "Free" : `${thingPrice(db, id)} G`,
+        disabled: this.buyPrice(id) > state.gold,
         help: thingInfo(db, id),
       })),
       8, 8, 190, 7 * 18 + 8, 1, 18,
     );
     this.mode = "buy";
+  }
+
+  private buyPrice(id: string): number {
+    return this.free ? 0 : thingPrice(this.rpg.db, id);
   }
 
   private openSell(): void {

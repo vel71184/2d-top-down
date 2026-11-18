@@ -48,6 +48,11 @@ Press **☰** (top-right), **Start** or **Y** (top face button) while walking ar
 
 If the whole party falls in battle, it's **Game Over** and you return to the title screen, so save often.
 
+## Secrets in the sample maps
+
+- **House back wall,** just above the innkeeper: face it and press A three times without moving. A door opens to a hidden cellar. It relocks once you leave the house.
+- **Cellar:** the **Debug Merchant** sells every item and piece of equipment in the game for free, for testing. Remove it from `cellar.tmj` before a real release.
+
 ## Making maps (Tiled)
 
 Maps are made with [Tiled](https://www.mapeditor.org/), a free map editor. Open `public/assets/maps/town.tmj` to see a working example.
@@ -65,8 +70,8 @@ Steps for a new map:
 | `door` | anything | `map` (target map name), `spawn` (spawn name there) | Walking onto it moves the player to another map |
 | `sign` | anything | `text`, with pages separated by `\|` | A to read |
 | `npc` | speaker name | `text` | Like a sign, but shows the speaker's name (NPC sprites come later) |
-| `secret` | anything | `presses` (default 3), `tile` (tile name to show once open, e.g. `door`; leave out to just remove the wall), `map` + `spawn` (optional: once open it works as a door), `text` (message when it opens) | A hidden passage. Face it and press A `presses` times without moving or turning (any step or turn resets the count). Its solid tiles open up, and it stays open (saved) |
-| `shop` | shop name | `items` (comma list of item/equipment ids), `text` (greeting) | Interact to buy and sell |
+| `secret` | anything | `presses` (default 3), `tile` (tile name to show once open, e.g. `door`; leave out to just remove the wall), `map` + `spawn` (optional: once open it works as a door), `text` (message when it opens), `relock` (bool: closes again once you leave the map) | A hidden passage. Face it and press A `presses` times without moving or turning (any step or turn resets the count). Its solid tiles open up. It stays open for good (saved), unless `relock` is set |
+| `shop` | shop name | `items` (comma list of item/equipment ids, or `*` for everything in the game), `text` (greeting), `free` (bool: everything costs 0) | Interact to buy and sell |
 | `inn` | innkeeper name | `price`, `text` | Interact to rest: full HP/MP for the price |
 | any of the above | | `sprite` (a sheet in `assets/sprites`, e.g. `merchant`), `facing` | Draws the object as a character, who turns to face you when you talk. Characters are solid |
 | `battle` | anything | `enemies` (e.g. `slime,slime,bat`), `text` (optional), `canFlee` (bool, default true) | Interact to start a fight, after showing `text` if set |

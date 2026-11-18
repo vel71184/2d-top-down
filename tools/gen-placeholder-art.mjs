@@ -240,6 +240,7 @@ const PALETTES = {
   // townsfolk
   merchant: { skin: "#e8b98c", hair: "#7a4a20", tunic: "#2f8a5a", tunicD: "#1f6a42", boot: "#3b2a1a" },
   innkeeper: { skin: "#f1c79a", hair: "#b8b8c0", tunic: "#b0483a", tunicD: "#7a3026", boot: "#3b2a1a" },
+  debugger: { skin: "#f1c79a", hair: "#30e090", tunic: "#2a2a3a", tunicD: "#16161f", boot: "#16161f", hat: "#20b070" },
 };
 function drawChar(img, ox, oy, dir, frame, P) {
   const step = frame === 1 ? 1 : frame === 3 ? -1 : 0;

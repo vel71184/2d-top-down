@@ -66,6 +66,8 @@ export class OverworldScene extends Scene {
   private secretAt: { obj: MapObject; x: number; y: number; facing: Direction } | null = null;
   private shake = 0;
   private lastFacing: Direction = "down";
+  /** Secrets with `relock` opened during this visit to the map (they close again when you leave). */
+  private openedThisVisit = new Set<number>();
   private time = 0;
   private readonly noEncounters = new URLSearchParams(location.search).has("noencounters");
 
@@ -109,7 +111,8 @@ export class OverworldScene extends Scene {
       this.encounterDist = 0;
       this.lastDistance = this.player.distance;
       this.ignoreEnemy = null;
-      // Hidden passages opened earlier stay open.
+      // Hidden passages opened earlier stay open (unless they relock when you leave the map).
+      this.openedThisVisit.clear();
       for (const o of map.objects) if (o.type === "secret" && this.rpg.state.flags.has(secretFlag(name, o))) this.openSecret(map, o, false);
       this.secretPresses = 0;
       this.secretAt = null;
@@ -244,7 +247,7 @@ export class OverworldScene extends Scene {
 
     // Doors (including opened secret passages that lead to another map)
     const doors = map.objectsAt(this.player.cx, this.player.cy).filter(
-      (o) => o.type === "door" || (o.type === "secret" && o.props.map && this.rpg.state.flags.has(secretFlag(this.mapName, o))),
+      (o) => o.type === "door" || (o.type === "secret" && o.props.map && this.isOpen(o)),
     );
     if (doors.length === 0) this.doorArmed = true;
     else if (this.doorArmed && !this.fade) this.useDoor(doors[0]);
@@ -256,7 +259,7 @@ export class OverworldScene extends Scene {
     if (enemy) return this.engage(enemy);
     const target = map.objectsAt(p.x, p.y).find((o) => ["sign", "npc", "battle", "shop", "inn"].includes(o.type));
     if (!target) {
-      const secret = map.objectsAt(p.x, p.y, "secret").find((o) => !this.rpg.state.flags.has(secretFlag(this.mapName, o)));
+      const secret = map.objectsAt(p.x, p.y, "secret").find((o) => !this.isOpen(o));
       if (secret) this.pressSecret(map, secret);
       return;
     }
@@ -265,7 +268,11 @@ export class OverworldScene extends Scene {
     if (actor) actor.facing = ({ up: "down", down: "up", left: "right", right: "left" } as const)[this.player.facing];
     if (target.type === "shop") {
       const stock = String(target.props.items ?? "").split(",").map((s) => s.trim()).filter(Boolean);
-      void this.game.scenes.push(new ShopScene(this.rpg, target.name || "Shop", stock, String(target.props.text ?? "Welcome!")));
+      // items "*" = everything in the game; free = costs nothing (handy for testing)
+      const all = stock.includes("*") ? [...Object.keys(this.rpg.db.items), ...Object.keys(this.rpg.db.equipment)] : stock;
+      void this.game.scenes.push(
+        new ShopScene(this.rpg, target.name || "Shop", all, String(target.props.text ?? "Welcome!"), target.props.free === true),
+      );
       return;
     }
     if (target.type === "inn") return this.inn(target);
@@ -298,8 +305,14 @@ export class OverworldScene extends Scene {
     if (this.secretPresses < Number(obj.props.presses ?? 3)) return;
     this.secretPresses = 0;
     this.secretAt = null;
-    this.rpg.state.flags.add(secretFlag(this.mapName, obj));
+    // `relock` passages only stay open until you leave this map; others are opened for good (saved).
+    if (obj.props.relock === true) this.openedThisVisit.add(obj.id);
+    else this.rpg.state.flags.add(secretFlag(this.mapName, obj));
     this.openSecret(map, obj, true);
+  }
+
+  private isOpen(o: MapObject): boolean {
+    return this.openedThisVisit.has(o.id) || this.rpg.state.flags.has(secretFlag(this.mapName, o));
   }
 
   private openSecret(map: TileMap, obj: MapObject, announce: boolean): void {
