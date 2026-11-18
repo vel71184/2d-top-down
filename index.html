@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>Top-Down RPG</title>
+    <style>
+      html, body { margin: 0; height: 100%; background: #000; overflow: hidden; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+      canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+      #world { image-rendering: pixelated; image-rendering: crisp-edges; }
+    </style>
+  </head>
+  <body>
+    <canvas id="world"></canvas>
+    <canvas id="ui"></canvas>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

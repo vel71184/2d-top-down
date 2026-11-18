@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Top-Down RPG</string>
+    <string name="title_activity_main">Top-Down RPG</string>
+    <string name="package_name">com.vel71184.toprpg</string>
+    <string name="custom_url_scheme">com.vel71184.toprpg</string>
+</resources>

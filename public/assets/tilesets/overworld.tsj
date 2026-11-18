@@ -1,0 +1,222 @@
+{
+ "columns": 8,
+ "image": "overworld.png",
+ "imagewidth": 128,
+ "imageheight": 32,
+ "margin": 0,
+ "spacing": 0,
+ "name": "overworld",
+ "tilecount": 16,
+ "tilewidth": 16,
+ "tileheight": 16,
+ "tiledversion": "1.11.0",
+ "type": "tileset",
+ "version": "1.10",
+ "tiles": [
+  {
+   "id": 0,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "grass"
+    }
+   ]
+  },
+  {
+   "id": 1,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "flowers"
+    }
+   ]
+  },
+  {
+   "id": 2,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "tallgrass"
+    }
+   ]
+  },
+  {
+   "id": 3,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "path"
+    }
+   ]
+  },
+  {
+   "id": 4,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "water"
+    },
+    {
+     "name": "solid",
+     "type": "bool",
+     "value": true
+    }
+   ]
+  },
+  {
+   "id": 5,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "tree"
+    },
+    {
+     "name": "solid",
+     "type": "bool",
+     "value": true
+    }
+   ]
+  },
+  {
+   "id": 6,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "stonewall"
+    },
+    {
+     "name": "solid",
+     "type": "bool",
+     "value": true
+    }
+   ]
+  },
+  {
+   "id": 7,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "floor"
+    }
+   ]
+  },
+  {
+   "id": 8,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "roof"
+    },
+    {
+     "name": "solid",
+     "type": "bool",
+     "value": true
+    }
+   ]
+  },
+  {
+   "id": 9,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "housewall"
+    },
+    {
+     "name": "solid",
+     "type": "bool",
+     "value": true
+    }
+   ]
+  },
+  {
+   "id": 10,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "door"
+    }
+   ]
+  },
+  {
+   "id": 11,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "sign"
+    },
+    {
+     "name": "solid",
+     "type": "bool",
+     "value": true
+    }
+   ]
+  },
+  {
+   "id": 12,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "rock"
+    },
+    {
+     "name": "solid",
+     "type": "bool",
+     "value": true
+    }
+   ]
+  },
+  {
+   "id": 13,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "void"
+    },
+    {
+     "name": "solid",
+     "type": "bool",
+     "value": true
+    }
+   ]
+  },
+  {
+   "id": 14,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "rug"
+    }
+   ]
+  },
+  {
+   "id": 15,
+   "properties": [
+    {
+     "name": "name",
+     "type": "string",
+     "value": "table"
+    },
+    {
+     "name": "solid",
+     "type": "bool",
+     "value": true
+    }
+   ]
+  }
+ ]
+}
