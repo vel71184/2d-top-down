@@ -16,7 +16,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // A fixed debug key, committed on purpose, so every build (local or GitHub Actions) is signed
+    // the same way and new APKs install over old ones without uninstalling (which would delete saves).
+    // This is NOT a release key; a Google Play release key must never be committed.
+    signingConfigs {
+        debug {
+            storeFile file('debug-shared.keystore')
+            storePassword 'android'
+            keyAlias 'androiddebugkey'
+            keyPassword 'android'
+        }
+    }
     buildTypes {
+        debug {
+            signingConfig signingConfigs.debug
+        }
         release {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'

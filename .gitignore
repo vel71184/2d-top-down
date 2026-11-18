@@ -5,4 +5,6 @@ dist/
 # Signing keys must never be committed
 *.jks
 *.keystore
+# ...except the shared debug key (debug builds only, safe to share)
+!android/app/debug-shared.keystore
 keystore.properties
