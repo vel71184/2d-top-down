@@ -1,6 +1,6 @@
 import type { Camera } from "../../engine/camera";
 import type { Input } from "../../engine/input";
-import { moveAndCollide, type Body } from "../../engine/physics";
+import { moveAndCollide, type Body, type Rect } from "../../engine/physics";
 import type { Direction, SpriteSheet } from "../../engine/sprite";
 import type { TileMap } from "../../engine/tilemap";
 
@@ -40,7 +40,7 @@ export class Player {
     this.walkTime = 0;
   }
 
-  update(dt: number, input: Input, map: TileMap): void {
+  update(dt: number, input: Input, map: TileMap, blockers: Rect[] = []): void {
     const m = input.move();
     const moving = m.x !== 0 || m.y !== 0;
     if (moving) {
@@ -48,7 +48,7 @@ export class Player {
       else if (Math.abs(m.y) > Math.abs(m.x) + 0.05) this.facing = m.y < 0 ? "up" : "down";
       const bx = this.body.x, by = this.body.y;
       const speed = SPEED * map.tileW;
-      moveAndCollide(map, this.body, m.x * speed * dt, m.y * speed * dt);
+      moveAndCollide(map, this.body, m.x * speed * dt, m.y * speed * dt, blockers);
       const moved = Math.hypot(this.body.x - bx, this.body.y - by);
       this.distance += moved;
       this.walkTime = moved > 0.01 ? this.walkTime + dt * Math.max(0.5, Math.hypot(m.x, m.y)) : 0;

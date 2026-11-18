@@ -15,6 +15,8 @@ export class GameState {
   party: PartyMember[] = [];
   inventory = new Map<string, number>();
   gold = 0;
+  /** Story/world flags, e.g. "defeated:town:12" for a beaten map enemy. Saved with the game (stage 4). */
+  flags = new Set<string>();
 
   static newGame(db: Database): GameState {
     const s = new GameState();

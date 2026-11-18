@@ -1,0 +1,11 @@
+{
+  "meadow": {
+    "groups": [
+      { "enemies": ["slime", "slime"], "weight": 4 },
+      { "enemies": ["bat"], "weight": 3 },
+      { "enemies": ["slime", "bat"], "weight": 3 },
+      { "enemies": ["bat", "bat", "slime"], "weight": 2 },
+      { "enemies": ["goblin"], "weight": 1 }
+    ]
+  }
+}

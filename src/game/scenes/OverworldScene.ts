@@ -1,7 +1,8 @@
-import { assetUrl } from "../../engine/assets";
+import { assetUrl, loadImage } from "../../engine/assets";
 import { Camera } from "../../engine/camera";
 import { Scene } from "../../engine/scene";
 import type { Direction } from "../../engine/sprite";
+import type { Rect } from "../../engine/physics";
 import { TileMap, type MapObject } from "../../engine/tilemap";
 import { BattleScene, type BattleOptions, type BattleResult } from "../battle/BattleScene";
 import type { RPG } from "../context";
@@ -10,11 +11,23 @@ import { MenuScene } from "./MenuScene";
 import { DialogueBox } from "../ui/DialogueBox";
 
 const FADE_SPEED = 4; // full fade in 0.25s
+const ENCOUNTER_FLASH = 0.5; // seconds of screen flashing before a battle
+const DEFAULT_ENCOUNTER_RATE = 0.1; // chance per tile walked inside a zone
+const DEFAULT_MIN_STEPS = 4; // tiles of grace after each battle
 
 type Fade = { dir: 1 | -1; alpha: number; onBlack?: () => Promise<void> };
 
+/** A visible enemy placed on the map (object Class "enemy"). */
+interface MapEnemy {
+  obj: MapObject;
+  image: HTMLImageElement;
+  /** World flag set when it's beaten, so it stays gone. */
+  flag: string;
+}
+
 /**
- * Walking around a map: movement, camera, doors between maps, signs and fights.
+ * Walking around a map: movement, camera, doors between maps, signs, random
+ * encounters and visible enemies.
  * Maps live in public/assets/maps/<name>.tmj and are made with Tiled.
  */
 export class OverworldScene extends Scene {
@@ -28,6 +41,17 @@ export class OverworldScene extends Scene {
   /** Doors only trigger after the player has stepped off every door (prevents ping-pong). */
   private doorArmed = false;
   private error: string | null = null;
+
+  private enemies: MapEnemy[] = [];
+  /** An enemy you ran from (or lost to) can't re-trigger until you step off it. */
+  private ignoreEnemy: MapEnemy | null = null;
+  /** Tiles walked inside encounter zones since the last battle. */
+  private encounterSteps = 0;
+  private encounterDist = 0;
+  private lastDistance = 0;
+  private flash: { t: number; start: () => void } | null = null;
+  private time = 0;
+  private readonly noEncounters = new URLSearchParams(location.search).has("noencounters");
 
   constructor(private rpg: RPG, private startMap: string, private startSpawn: string) {
     super(rpg.game);
@@ -50,14 +74,45 @@ export class OverworldScene extends Scene {
       this.player.placeAt(c.x, c.y, map.tileW, (spawn.props.facing as Direction | undefined) ?? facing);
       this.doorArmed = false;
       this.error = null;
+      this.encounterSteps = 0;
+      this.encounterDist = 0;
+      this.lastDistance = this.player.distance;
+      this.ignoreEnemy = null;
+      this.enemies = await this.loadEnemies(map, name);
     } catch (e) {
       console.error(e);
       this.error = e instanceof Error ? e.message : String(e);
     }
   }
 
+  private async loadEnemies(map: TileMap, mapName: string): Promise<MapEnemy[]> {
+    const out: MapEnemy[] = [];
+    for (const obj of map.objects) {
+      if (obj.type !== "enemy") continue;
+      const flag = `defeated:${mapName}:${obj.id}`;
+      if (this.rpg.state.flags.has(flag)) continue;
+      const ids = enemyList(obj);
+      const def = this.rpg.db.enemies[ids[0]];
+      if (!def) throw new Error(`Map "${mapName}": enemy object ${obj.id} has unknown enemy "${ids[0]}"`);
+      const image = await loadImage(assetUrl(`assets/enemies/${String(obj.props.image ?? def.image)}`));
+      out.push({ obj, image, flag });
+    }
+    return out;
+  }
+
   update(dt: number): void {
     const input = this.game.input;
+    this.time += dt;
+
+    if (this.flash) {
+      this.flash.t += dt;
+      if (this.flash.t >= ENCOUNTER_FLASH) {
+        const start = this.flash.start;
+        this.flash = null;
+        start();
+      }
+      return;
+    }
 
     if (this.fade) {
       this.fade.alpha += this.fade.dir * FADE_SPEED * dt;
@@ -91,9 +146,41 @@ export class OverworldScene extends Scene {
       return;
     }
 
-    this.player.update(dt, input, map);
+    this.player.update(dt, input, map, this.enemies.map((e) => enemyBox(e.obj, map.tileW)));
+    const moved = this.player.distance - this.lastDistance;
+    this.lastDistance = this.player.distance;
 
     if (input.pressed("confirm")) this.interact(map);
+    if (this.dialogue || this.fade?.dir === 1) return;
+
+    // Bumping into a visible enemy
+    const b = this.player.body;
+    for (const e of this.enemies) {
+      const r = grow(enemyBox(e.obj, map.tileW), 2);
+      const touching = b.x < r.x + r.w && b.x + b.w > r.x && b.y < r.y + r.h && b.y + b.h > r.y;
+      if (e === this.ignoreEnemy) {
+        if (!touching) this.ignoreEnemy = null;
+      } else if (touching) {
+        this.engage(e);
+        return;
+      }
+    }
+
+    // Random encounters
+    const zone = map.objectsAt(this.player.cx, this.player.cy, "encounter")[0];
+    if (zone && moved > 0 && !this.noEncounters) {
+      this.encounterDist += moved;
+      while (this.encounterDist >= map.tileW) {
+        this.encounterDist -= map.tileW;
+        this.encounterSteps++;
+        const rate = Number(zone.props.rate ?? DEFAULT_ENCOUNTER_RATE);
+        const minSteps = Number(zone.props.minSteps ?? DEFAULT_MIN_STEPS);
+        if (this.encounterSteps >= minSteps && Math.random() < rate) {
+          this.randomEncounter(zone);
+          return;
+        }
+      }
+    }
 
     // Doors
     const doors = map.objectsAt(this.player.cx, this.player.cy, "door");
@@ -103,6 +190,8 @@ export class OverworldScene extends Scene {
 
   private interact(map: TileMap): void {
     const p = this.player.facingPoint();
+    const enemy = this.enemies.find((e) => p.x >= e.obj.x && p.x < e.obj.x + e.obj.width && p.y >= e.obj.y && p.y < e.obj.y + e.obj.height);
+    if (enemy) return this.engage(enemy);
     const target = map.objectsAt(p.x, p.y).find((o) => ["sign", "npc", "battle"].includes(o.type));
     if (!target) return;
     if (target.type === "battle") {
@@ -120,8 +209,46 @@ export class OverworldScene extends Scene {
     this.dialogue = new DialogueBox(text.split("|"), speaker);
   }
 
+  /** Starts a fight with a visible map enemy (after its line of dialogue, if any). */
+  private engage(e: MapEnemy): void {
+    const fight = () =>
+      this.withFlash(() =>
+        this.startBattle(enemyList(e.obj), { canFlee: e.obj.props.canFlee !== false }, (result) => {
+          if (result === "victory") {
+            this.rpg.state.flags.add(e.flag);
+            this.enemies = this.enemies.filter((x) => x !== e);
+          } else {
+            this.ignoreEnemy = e;
+          }
+        }),
+      );
+    this.ignoreEnemy = e;
+    if (e.obj.props.text) {
+      this.dialogue = new DialogueBox(String(e.obj.props.text).split("|"), e.obj.name || undefined);
+      this.afterDialogue = fight;
+    } else fight();
+  }
+
+  private randomEncounter(zone: MapObject): void {
+    const tableId = String(zone.props.table ?? zone.name);
+    const table = this.rpg.db.encounters[tableId];
+    if (!table || table.groups.length === 0) {
+      console.warn(`Encounter zone "${zone.name}" uses unknown table "${tableId}" (public/data/encounters.json)`);
+      return;
+    }
+    const total = table.groups.reduce((s, g) => s + g.weight, 0);
+    let r = Math.random() * total;
+    const group = table.groups.find((g) => (r -= g.weight) <= 0) ?? table.groups[0];
+    this.withFlash(() => this.startBattle(group.enemies));
+  }
+
+  /** Flashes the screen briefly (the "encounter!" cue), then runs `start`. */
+  private withFlash(start: () => void): void {
+    this.flash = { t: 0, start };
+  }
+
   /** Fades out, runs a battle on top of this scene, then fades back in. */
-  startBattle(enemyIds: string[], options: BattleOptions = {}): void {
+  startBattle(enemyIds: string[], options: BattleOptions = {}, onResult?: (r: BattleResult) => void): void {
     if (this.fade?.dir === 1) return; // already leaving
     this.fade = {
       dir: 1,
@@ -130,7 +257,10 @@ export class OverworldScene extends Scene {
         this.game.scenes.push(
           new BattleScene(this.rpg, enemyIds, options, (result: BattleResult) => {
             if (result === "defeat") this.rpg.state.restoreParty();
+            this.encounterSteps = 0;
+            this.encounterDist = 0;
             this.game.input.reset();
+            onResult?.(result);
           }),
         ),
     };
@@ -150,7 +280,18 @@ export class OverworldScene extends Scene {
     if (map) {
       this.cam.follow(this.player.cx, this.player.cy, d.width, d.height, map.pixelWidth, map.pixelHeight);
       map.draw(world, this.cam, false);
-      this.player.render(world, this.cam);
+      // Characters back-to-front, so whoever is lower on screen is drawn in front.
+      const playerFeet = this.player.body.y + this.player.body.h;
+      const sorted = [...this.enemies].sort((a, b) => a.obj.y + a.obj.height - (b.obj.y + b.obj.height));
+      let playerDrawn = false;
+      for (const e of sorted) {
+        if (!playerDrawn && e.obj.y + e.obj.height > playerFeet) {
+          this.player.render(world, this.cam);
+          playerDrawn = true;
+        }
+        this.drawEnemy(world, e, map.tileW);
+      }
+      if (!playerDrawn) this.player.render(world, this.cam);
       map.draw(world, this.cam, true);
       if (this.game.debug) {
         map.drawDebug(world, this.cam);
@@ -161,6 +302,13 @@ export class OverworldScene extends Scene {
     }
 
     this.dialogue?.render(ui, d.uiWidth, d.uiHeight);
+
+    if (this.flash) {
+      // Two quick white flashes
+      const phase = (this.flash.t / ENCOUNTER_FLASH) * 4;
+      ui.fillStyle = `rgba(255,255,255,${Math.floor(phase) % 2 === 0 ? 0.75 * (1 - (phase % 1)) : 0})`;
+      ui.fillRect(0, 0, d.uiWidth, d.uiHeight);
+    }
 
     if (this.fade) {
       ui.fillStyle = `rgba(0,0,0,${Math.max(0, Math.min(1, this.fade.alpha))})`;
@@ -178,6 +326,35 @@ export class OverworldScene extends Scene {
       ui.fillText(this.error.slice(0, 80), 14, 28);
     }
   }
+
+  private drawEnemy(ctx: CanvasRenderingContext2D, e: MapEnemy, tile: number): void {
+    const o = e.obj;
+    // Drawn `size` tiles tall (default 1), standing on the bottom of its object rectangle.
+    const h = tile * Number(o.props.size ?? 1);
+    const w = (e.image.width / e.image.height) * h;
+    const bob = Math.round(Math.sin(this.time * 3 + o.id) * (tile / 16));
+    const x = Math.round(o.x + o.width / 2 - w / 2 - this.cam.x);
+    const y = Math.round(o.y + o.height - h - this.cam.y);
+    ctx.fillStyle = "rgba(0,0,0,0.25)";
+    ctx.beginPath();
+    ctx.ellipse(x + w / 2, y + h - 1, w * 0.3, tile / 10, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.drawImage(e.image, x, y + bob, w, h);
+  }
+}
+
+function enemyList(o: MapObject): string[] {
+  return String(o.props.enemies ?? o.name ?? "slime").split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+/** Solid area of a map enemy: most of its rectangle (a little open at the top for overlap with heads). */
+function enemyBox(o: MapObject, tile: number): Rect {
+  const inset = tile * 0.1;
+  return { x: o.x + inset, y: o.y + tile * 0.25, w: o.width - inset * 2, h: o.height - tile * 0.25 - 1 };
+}
+
+function grow(r: Rect, by: number): Rect {
+  return { x: r.x - by, y: r.y - by, w: r.w + by * 2, h: r.h + by * 2 };
 }
 
 function center(o: MapObject): { x: number; y: number } {
