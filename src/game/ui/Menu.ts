@@ -14,7 +14,8 @@ export type MenuResult = { type: "select"; index: number } | { type: "cancel" } 
 
 /**
  * A grid/list of choices inside a panel. Works with keys / joystick
- * (move the cursor, confirm) and with taps (tap an item to pick it).
+ * (move the cursor, confirm), and optionally with taps (tap an item to pick it).
+ * Moving the cursor past the visible rows scrolls the list.
  */
 export class Menu {
   cursor = 0;
@@ -40,11 +41,12 @@ export class Menu {
     return this.items[this.cursor];
   }
 
-  update(input: Input): MenuResult {
+  /** `allowTaps`: false for menus driven only by the joystick / D-pad and buttons (battles). */
+  update(input: Input, allowTaps = true): MenuResult {
     const n = this.items.length;
     if (input.pressed("cancel")) return { type: "cancel" };
 
-    for (const t of input.taps) {
+    for (const t of allowTaps ? input.taps : []) {
       if (t.x < this.x || t.x > this.x + this.w || t.y < this.y || t.y > this.y + this.h) continue;
       // scroll arrows
       if (t.x > this.x + this.w - 16 && this.rows > this.visibleRows) {

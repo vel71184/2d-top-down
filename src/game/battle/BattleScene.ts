@@ -126,7 +126,7 @@ export class BattleScene extends Scene {
     }
     if (this.phase === "result") {
       const input = this.game.input;
-      if (input.pressed("confirm") || input.pressed("cancel") || input.taps.length) this.startOutro();
+      if (input.pressed("confirm") || input.pressed("cancel")) this.startOutro();
       return;
     }
     if (this.fade > 0.5) return; // still fading in
@@ -211,7 +211,7 @@ export class BattleScene extends Scene {
     const { db, state } = this.rpg;
 
     if (mode.m === "command" && this.commandMenu) {
-      const r = this.commandMenu.update(input);
+      const r = this.commandMenu.update(input, false);
       if (r?.type !== "select") return;
       switch (r.index) {
         case 0:
@@ -252,9 +252,7 @@ export class BattleScene extends Scene {
     }
 
     if ((mode.m === "skill" || mode.m === "item") && this.listMenu) {
-      // Touch "back": tap the battlefield.
-      if (input.taps.some((t) => t.y < this.panelTop)) return this.openCommand();
-      const r = this.listMenu.update(input);
+      const r = this.listMenu.update(input, false);
       if (r?.type === "cancel") return this.openCommand();
       if (r?.type !== "select") return;
       const id = this.listIds[r.index];
@@ -274,15 +272,6 @@ export class BattleScene extends Scene {
       mode.index = Math.min(mode.index, pool.length - 1);
       if (input.pressed("cancel")) return this.backFromTarget(mode.back);
       const multi = isMultiTarget(mode.type);
-      for (const t of input.taps) {
-        const hit = pool.find((b) => {
-          const r = b.bounds;
-          return t.x >= r.x - 6 && t.x <= r.x + r.w + 6 && t.y >= r.y - 6 && t.y <= r.y + r.h + 6;
-        });
-        if (hit) return this.commit(mode.make(multi ? pool : [hit]));
-        // Tapping anywhere else goes back.
-        return this.backFromTarget(mode.back);
-      }
       const nav = input.nav();
       if (nav === "up" || nav === "left") mode.index = (mode.index - 1 + pool.length) % pool.length;
       if (nav === "down" || nav === "right") mode.index = (mode.index + 1) % pool.length;
@@ -722,7 +711,7 @@ export class BattleScene extends Scene {
     if (Math.floor(this.time * 2) % 2 === 0) {
       ctx.font = font(9);
       ctx.fillStyle = COLORS.dim;
-      ctx.fillText("Tap or press A to continue", W / 2, y + h - 8);
+      ctx.fillText("Press A to continue", W / 2, y + h - 8);
     }
   }
 }

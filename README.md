@@ -13,7 +13,7 @@ npm run dev        # open the printed URL; use --host URL to try it on your phon
 ```
 
 Controls:
-- **Phone:** drag anywhere on the left side for the joystick. **A** confirms or interacts, **B** cancels, **☰** opens the menu (menu comes in a later stage). In battle, use the joystick to move the cursor and A to confirm, or tap a command or target directly. B goes back. Only a quick tap without sliding counts as a tap, so dragging the joystick never selects anything.
+- **Phone:** drag anywhere on the left side for the joystick. **A** confirms or interacts, **B** cancels, **☰** opens the menu (menu comes in a later stage). In battle, use the joystick to move the cursor (long lists scroll as you go), **A** to confirm and **B** to go back. Battle menus don't respond to taps.
 - **Keyboard:** WASD or arrow keys to move or pick from menus. Space, Enter, Z or E to confirm or interact. Esc or X to cancel.
 - **Controller** (8BitDo, Xbox, PlayStation, etc.): left stick or D-pad to move and pick from menus. The **bottom** face button confirms or interacts, the **right** one cancels, and **Start** or the **top** button opens the menu. On-screen touch controls hide while you use a controller and come back when you touch the screen.
   - Buttons are matched by position, not label. On an 8BitDo with Nintendo-style labels, the bottom button (printed "B") confirms. If you'd rather the right-hand button confirm, add `?nintendo` to the URL in a browser, or set `padSettings.swapConfirmCancel` in `src/engine/gamepad.ts` for the app.
