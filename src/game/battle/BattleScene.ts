@@ -92,7 +92,6 @@ export class BattleScene extends Scene {
 
   async enter(): Promise<void> {
     const { db, state, sprites } = this.rpg;
-    this.game.input.virtualPad = false;
     this.game.input.reset();
 
     for (const m of state.party) {
@@ -112,10 +111,6 @@ export class BattleScene extends Scene {
       const name = (counts.get(id) ?? 0) > 1 ? `${def.name} ${String.fromCharCode(64 + n)}` : def.name;
       this.battlers.push(new Battler("enemy", name, def.stats, def.stats.hp, def.stats.mp, [], undefined, def, undefined, img));
     }
-  }
-
-  exit(): void {
-    this.game.input.virtualPad = true;
   }
 
   // ------------------------------------------------------------------ update

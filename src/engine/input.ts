@@ -53,6 +53,9 @@ const BUTTONS: TouchButton[] = [
 ];
 
 const STICK_RADIUS = 28;
+/** A touch that moves less than this (virtual px) and lifts quickly is a tap, not a joystick drag. */
+const TAP_SLOP = 6;
+const TAP_MAX_TIME = 350;
 const STICK_DEADZONE = 0.18;
 
 /**
@@ -69,6 +72,7 @@ export class Input {
   private stickPointer: number | null = null;
   private stickOrigin = { x: 0, y: 0 };
   private stickPos = { x: 0, y: 0 };
+  private stickStart = { x: 0, y: 0, time: 0, moved: 0 };
   private buttonPointers = new Map<number, Action>();
 
   private gamepads = new Gamepads();
@@ -238,17 +242,21 @@ export class Input {
         return;
       }
     }
-    this.queuedTaps.push(p);
     if (this.virtualPad && p.x < this.display.width * 0.55 && this.stickPointer === null) {
+      // Joystick side: becomes a tap only if released without dragging (see onPointerUp).
       this.stickPointer = e.pointerId;
       this.stickOrigin = p;
       this.stickPos = p;
+      this.stickStart = { x: p.x, y: p.y, time: performance.now(), moved: 0 };
+      return;
     }
+    this.queuedTaps.push(p);
   }
 
   private onPointerMove(e: PointerEvent): void {
     if (e.pointerId !== this.stickPointer) return;
     const p = this.display.toVirtual(e.clientX, e.clientY);
+    this.stickStart.moved = Math.max(this.stickStart.moved, Math.hypot(p.x - this.stickStart.x, p.y - this.stickStart.y));
     // Let the joystick base follow the finger if dragged far, so it never "runs out".
     const dx = p.x - this.stickOrigin.x, dy = p.y - this.stickOrigin.y;
     const len = Math.hypot(dx, dy);
@@ -261,7 +269,11 @@ export class Input {
   }
 
   private onPointerUp(e: PointerEvent): void {
-    if (e.pointerId === this.stickPointer) this.stickPointer = null;
+    if (e.pointerId === this.stickPointer) {
+      this.stickPointer = null;
+      const s = this.stickStart;
+      if (s.moved < TAP_SLOP && performance.now() - s.time < TAP_MAX_TIME) this.queuedTaps.push({ x: s.x, y: s.y });
+    }
     const a = this.buttonPointers.get(e.pointerId);
     if (a) {
       this.buttonPointers.delete(e.pointerId);
@@ -274,19 +286,19 @@ export class Input {
     if (!this.touchMode || !this.virtualPad) return;
     ctx.save();
     if (this.stickPointer !== null) {
-      ctx.globalAlpha = 0.35;
+      ctx.globalAlpha = 0.2;
       ctx.fillStyle = "#fff";
       ctx.beginPath();
       ctx.arc(this.stickOrigin.x, this.stickOrigin.y, STICK_RADIUS, 0, Math.PI * 2);
       ctx.fill();
-      ctx.globalAlpha = 0.6;
+      ctx.globalAlpha = 0.38;
       const m = this.move();
       ctx.beginPath();
       ctx.arc(this.stickOrigin.x + m.x * STICK_RADIUS, this.stickOrigin.y + m.y * STICK_RADIUS, 12, 0, Math.PI * 2);
       ctx.fill();
     } else if (this.virtualPad) {
       // Hint where the joystick lives.
-      ctx.globalAlpha = 0.18;
+      ctx.globalAlpha = 0.12;
       ctx.strokeStyle = "#fff";
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -298,12 +310,12 @@ export class Input {
     for (const b of BUTTONS) {
       const c = this.buttonCenter(b);
       const down = this.held.has(b.action);
-      ctx.globalAlpha = down ? 0.65 : 0.38;
+      ctx.globalAlpha = down ? 0.42 : 0.18;
       ctx.fillStyle = "#fff";
       ctx.beginPath();
       ctx.arc(c.x, c.y, b.r, 0, Math.PI * 2);
       ctx.fill();
-      ctx.globalAlpha = 0.9;
+      ctx.globalAlpha = down ? 0.8 : 0.5;
       ctx.fillStyle = "#1c1a24";
       ctx.font = `bold ${Math.round(b.r * 0.9)}px sans-serif`;
       ctx.fillText(b.label, c.x, c.y + 1);
