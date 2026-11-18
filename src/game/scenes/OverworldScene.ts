@@ -6,6 +6,7 @@ import { TileMap, type MapObject } from "../../engine/tilemap";
 import { BattleScene, type BattleOptions, type BattleResult } from "../battle/BattleScene";
 import type { RPG } from "../context";
 import { Player } from "../entities/Player";
+import { MenuScene } from "./MenuScene";
 import { DialogueBox } from "../ui/DialogueBox";
 
 const FADE_SPEED = 4; // full fade in 0.25s
@@ -82,6 +83,11 @@ export class OverworldScene extends Scene {
         this.afterDialogue = null;
         next?.();
       }
+      return;
+    }
+
+    if (input.pressed("menu") && !this.fade) {
+      void this.game.scenes.push(new MenuScene(this.rpg));
       return;
     }
 

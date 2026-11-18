@@ -4,6 +4,7 @@ import { SpriteSheet } from "./engine/sprite";
 import type { RPG } from "./game/context";
 import { loadDatabase } from "./game/data";
 import { OverworldScene } from "./game/scenes/OverworldScene";
+import { loadSettings } from "./game/settings";
 import { GameState } from "./game/state";
 
 async function boot(): Promise<void> {
@@ -12,6 +13,7 @@ async function boot(): Promise<void> {
     document.getElementById("ui") as HTMLCanvasElement,
   );
 
+  loadSettings();
   const db = await loadDatabase();
   const state = GameState.newGame(db);
   const sprites = new Map<string, SpriteSheet>();

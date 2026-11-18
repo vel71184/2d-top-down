@@ -34,6 +34,15 @@ Every push to GitHub builds an installable APK:
 
 To build it locally instead, install Android Studio, then run `npm run android:sync` and open the `android/` folder in Android Studio.
 
+## Menu
+
+Press **☰** (top-right), **Start** or **Y** (top face button) while walking around:
+- **Items:** use Potions, Ethers and Revive Tonics on your party.
+- **Status:** a character's stats and skills.
+- **Settings:** battle gauges (Wait or Active), and which controller button confirms. Settings are remembered on the device.
+
+Equipment and saving come in stage 4.
+
 ## Making maps (Tiled)
 
 Maps are made with [Tiled](https://www.mapeditor.org/), a free map editor. Open `public/assets/maps/town.tmj` to see a working example.
