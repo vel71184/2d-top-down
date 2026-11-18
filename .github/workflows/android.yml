@@ -8,19 +8,17 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
-
-      - uses: android-actions/setup-android@v3
 
       - name: Build web game
         run: |
@@ -30,11 +28,12 @@ jobs:
       - name: Copy game into Android project
         run: npx cap sync android
 
+      # GitHub's Ubuntu runners come with the Android SDK preinstalled (ANDROID_HOME).
       - name: Build debug APK
         working-directory: android
         run: ./gradlew assembleDebug --no-daemon
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: top-down-rpg-debug-apk
           path: android/app/build/outputs/apk/debug/app-debug.apk
