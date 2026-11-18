@@ -111,6 +111,7 @@ export class BattleScene extends Scene {
       const name = (counts.get(id) ?? 0) > 1 ? `${def.name} ${String.fromCharCode(64 + n)}` : def.name;
       this.battlers.push(new Battler("enemy", name, def.stats, def.stats.hp, def.stats.mp, [], undefined, def, undefined, img));
     }
+    for (const b of this.battlers) b.worldScale = this.game.display.worldScale;
   }
 
   // ------------------------------------------------------------------ update
@@ -472,7 +473,10 @@ export class BattleScene extends Scene {
   }
 
   render(world: CanvasRenderingContext2D, ui: CanvasRenderingContext2D): void {
-    const W = this.game.display.width, H = this.game.display.height;
+    // The battle is laid out in UI units; the world canvas is scaled to match.
+    const d = this.game.display;
+    const W = d.uiWidth, H = d.uiHeight;
+    world.setTransform(d.worldScale, 0, 0, d.worldScale, 0, 0);
     this.layout(W, H);
     this.drawBackground(world, W, H);
 
@@ -624,7 +628,7 @@ export class BattleScene extends Scene {
 
   /** Puts a menu in the left part of the bottom panel. */
   private placeMenu(menu: Menu): Menu {
-    const W = this.game.display.width, H = this.game.display.height;
+    const W = this.game.display.uiWidth, H = this.game.display.uiHeight;
     this.panelTop = H - 78;
     return Object.assign(menu, { x: 4, y: this.panelTop, w: Math.round(Math.min(178, W * 0.4)), h: H - this.panelTop - 4 });
   }

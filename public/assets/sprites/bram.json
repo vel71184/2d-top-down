@@ -1,7 +1,7 @@
 {
   "image": "bram.png",
-  "frameWidth": 16,
-  "frameHeight": 16,
+  "frameWidth": 32,
+  "frameHeight": 32,
   "rows": { "down": 0, "left": 1, "right": 2, "up": 3 },
   "walkFrames": [0, 1, 2, 3],
   "walkFps": 8

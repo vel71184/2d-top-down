@@ -8,8 +8,8 @@ export interface Body {
   h: number;
 }
 
-/** How far (px) the body may be nudged sideways to slip around a corner. */
-const CORNER_ASSIST = 6;
+/** How far the body may be nudged sideways to slip around a corner, as a fraction of a tile. */
+const CORNER_ASSIST = 0.375;
 
 /**
  * Moves a body by (dx, dy) against the map's solid tiles, one axis at a time
@@ -20,8 +20,9 @@ const CORNER_ASSIST = 6;
 export function moveAndCollide(map: TileMap, b: Body, dx: number, dy: number): { hitX: boolean; hitY: boolean } {
   const hitX = dx !== 0 && !stepAxis(map, b, dx, 0);
   const hitY = dy !== 0 && !stepAxis(map, b, 0, dy);
-  if (hitX && dy === 0) cornerAssist(map, b, 0, 1, Math.abs(dx), dx);
-  if (hitY && dx === 0) cornerAssist(map, b, 1, 0, Math.abs(dy), dy);
+  const reach = Math.round(CORNER_ASSIST * map.tileW);
+  if (hitX && dy === 0) cornerAssist(map, b, 0, 1, Math.abs(dx), dx, reach);
+  if (hitY && dx === 0) cornerAssist(map, b, 1, 0, Math.abs(dy), dy, reach);
   return { hitX, hitY };
 }
 
@@ -41,10 +42,10 @@ function stepAxis(map: TileMap, b: Body, dx: number, dy: number): boolean {
   return false;
 }
 
-function cornerAssist(map: TileMap, b: Body, ax: number, ay: number, speed: number, dir: number): void {
+function cornerAssist(map: TileMap, b: Body, ax: number, ay: number, speed: number, dir: number, reach: number): void {
   const mx = ax === 0 ? Math.sign(dir) : 0;
   const my = ay === 0 ? Math.sign(dir) : 0;
-  for (let off = 1; off <= CORNER_ASSIST; off++) {
+  for (let off = 1; off <= reach; off++) {
     for (const s of [-1, 1]) {
       const ox = ax * off * s, oy = ay * off * s;
       // Free to shift sideways AND then continue forward from there?

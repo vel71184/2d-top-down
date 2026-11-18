@@ -46,12 +46,19 @@ function encodePng(img) {
 }
 
 // ---------- drawing helpers ----------
-const image = (w, h) => ({ w, h, px: Buffer.alloc(w * h * 4) });
+// Art is designed on a 16-unit grid and rendered at S pixels per unit (S = 2 -> 32x32 tiles).
+// Shapes like discs are drawn at full resolution so they come out smooth, `fine()` places
+// single real pixels for texture, and `outline()` adds a dark edge around sprites.
+const S = 2;
+const image = (w, h) => ({ w: w * S, h: h * S, px: Buffer.alloc(w * S * h * S * 4) });
 function hex(c) {
   const n = parseInt(c.slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255, 255];
 }
-function pset(img, x, y, color) {
+/** Sets one real pixel. */
+function fine(img, x, y, color) {
+  x = Math.floor(x);
+  y = Math.floor(y);
   if (x < 0 || y < 0 || x >= img.w || y >= img.h) return;
   const [r, g, b, a] = typeof color === "string" ? hex(color) : color;
   const i = (y * img.w + x) * 4;
@@ -60,23 +67,46 @@ function pset(img, x, y, color) {
   img.px[i + 2] = b;
   img.px[i + 3] = a;
 }
-function rect(img, x, y, w, h, color) {
-  for (let j = 0; j < h; j++) for (let i = 0; i < w; i++) pset(img, x + i, y + j, color);
+/** Sets one design unit (S x S real pixels). */
+function pset(img, x, y, color) {
+  for (let j = 0; j < S; j++) for (let i = 0; i < S; i++) fine(img, x * S + i, y * S + j, color);
 }
+function rect(img, x, y, w, h, color) {
+  for (let j = 0; j < h * S; j++) for (let i = 0; i < w * S; i++) fine(img, x * S + i, y * S + j, color);
+}
+/** Filled circle centred on design unit (cx, cy), drawn at full resolution. */
 function disc(img, cx, cy, r, color) {
-  for (let y = -r; y <= r; y++)
-    for (let x = -r; x <= r; x++) if (x * x + y * y <= r * r + r * 0.6) pset(img, cx + x, cy + y, color);
+  const rx = (cx + 0.5) * S, ry = (cy + 0.5) * S, rr = (r + 0.5) * S;
+  for (let y = Math.floor(ry - rr); y <= ry + rr; y++)
+    for (let x = Math.floor(rx - rr); x <= rx + rr; x++)
+      if ((x + 0.5 - rx) ** 2 + (y + 0.5 - ry) ** 2 <= rr * rr) fine(img, x, y, color);
 }
 let seed = 1234;
 const rand = () => ((seed = (seed * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff);
+/** Random single real pixels over a 16x16-unit tile (texture). */
 function speckle(img, ox, oy, colors, count) {
-  for (let i = 0; i < count; i++)
-    pset(img, ox + Math.floor(rand() * 16), oy + Math.floor(rand() * 16), colors[i % colors.length]);
+  for (let i = 0; i < count * S; i++)
+    fine(img, ox * S + Math.floor(rand() * 16 * S), oy * S + Math.floor(rand() * 16 * S), colors[i % colors.length]);
+}
+/**
+ * Draws a 1px dark outline around opaque shapes, inside the box (x, y, w, h) in design
+ * units (so neighbouring tiles in a sheet don't bleed into each other).
+ */
+function outline(img, x, y, w, h, color = "#1a1420") {
+  const x0 = x * S, y0 = y * S, x1 = (x + w) * S, y1 = (y + h) * S;
+  const alpha = (px, py) => (px < x0 || py < y0 || px >= x1 || py >= y1 ? 0 : img.px[(py * img.w + px) * 4 + 3]);
+  const add = [];
+  for (let py = y0; py < y1; py++)
+    for (let px = x0; px < x1; px++) {
+      if (alpha(px, py) !== 0) continue;
+      if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => alpha(px + dx, py + dy) === 255)) add.push([px, py]);
+    }
+  for (const [px, py] of add) fine(img, px, py, color);
 }
 
 // ---------- tileset ----------
 // Keep this list in sync with public/assets/tilesets/overworld.tsj (solid flags).
-const T = 16;
+const T = 16; // tile size in design units (x S = 32px)
 const COLS = 8;
 const tiles = [
   "grass", "flowers", "tallgrass", "path", "water", "tree", "stonewall", "floor",
@@ -114,12 +144,21 @@ const draw = {
   },
   water(x, y) {
     rect(ts, x, y, T, T, "#2f6fc0");
-    for (const [wx, wy] of [[2, 3], [9, 6], [4, 11], [11, 13]]) rect(ts, x + wx, y + wy, 4, 1, "#7fb6ef");
+    for (const [wx, wy] of [[2, 3], [9, 6], [4, 11], [11, 13]]) {
+      rect(ts, x + wx, y + wy, 4, 0.5, "#7fb6ef");
+      fine(ts, (x + wx + 4) * S, (y + wy) * S, "#b8dcff");
+    }
+    speckle(ts, x, y, ["#3a7cd0"], 10);
   },
   tree(x, y) {
     rect(ts, x + 6, y + 10, 4, 6, "#6b4423");
     disc(ts, x + 8, y + 7, 6, "#2d6b2a");
     disc(ts, x + 7, y + 6, 4, "#3e8a37");
+    // leaf texture
+    for (let i = 0; i < 60; i++) {
+      const a = rand() * Math.PI * 2, r = Math.sqrt(rand()) * 5.5;
+      fine(ts, (x + 8.5 + Math.cos(a) * r) * S, (y + 7.5 + Math.sin(a) * r) * S, i % 3 ? "#25592a" : "#5aa84f");
+    }
     pset(ts, x + 5, y + 4, "#5aa84f");
     pset(ts, x + 6, y + 4, "#5aa84f");
   },
@@ -185,6 +224,11 @@ const draw = {
   },
 };
 tiles.forEach((name, i) => draw[name]((i % COLS) * T, Math.floor(i / COLS) * T));
+// Outline the objects that sit on top of other tiles.
+for (const name of ["tree", "sign", "rock", "table"]) {
+  const i = tiles.indexOf(name);
+  outline(ts, (i % COLS) * T, Math.floor(i / COLS) * T, T, T);
+}
 
 // ---------- character sprite sheets ----------
 // 4 columns (walk frames: stand, step, stand, step) x 4 rows (down, left, right, up).
@@ -229,6 +273,14 @@ function drawChar(img, ox, oy, dir, frame, P) {
     rect(img, ox + 3, oy + 2, 10, 1, P.hat);
     rect(img, ox + 5, oy + 0, 6, 2, P.hat);
   }
+  // finer details: belt, eye shine, hair highlight
+  rect(img, ox + 4, oy + 11, 8, 0.5, P.tunicD);
+  if (dir === "down") {
+    fine(img, (ox + 6) * S, (oy + 5) * S, "#ffffff");
+    fine(img, (ox + 9) * S, (oy + 5) * S, "#ffffff");
+  }
+  if (dir === "left") fine(img, (ox + 5) * S, (oy + 5) * S, "#ffffff");
+  if (dir === "right") fine(img, (ox + 10) * S + 1, (oy + 5) * S, "#ffffff");
   if (P.helmet) {
     rect(img, ox + 4, oy + 1, 8, 2, P.helmet);
     if (dir !== "up") rect(img, ox + 4, oy + 3, 1, 2, P.helmet), rect(img, ox + 11, oy + 3, 1, 2, P.helmet);
@@ -239,7 +291,10 @@ const sheets = {};
 for (const [name, P] of Object.entries(PALETTES)) {
   const img = image(4 * T, 4 * T);
   ["down", "left", "right", "up"].forEach((dir, row) => {
-    for (let f = 0; f < 4; f++) drawChar(img, f * T, row * T, dir, f, P);
+    for (let f = 0; f < 4; f++) {
+      drawChar(img, f * T, row * T, dir, f, P);
+      outline(img, f * T, row * T, T, T);
+    }
   });
   sheets[name] = img;
 }
@@ -300,6 +355,8 @@ function save(path, img) {
 }
 save("public/assets/tilesets/overworld.png", ts);
 for (const [name, img] of Object.entries(sheets)) save(`public/assets/sprites/${name}.png`, img);
-save("public/assets/enemies/slime.png", enemySlime());
-save("public/assets/enemies/bat.png", enemyBat());
-save("public/assets/enemies/goblin.png", enemyGoblin());
+for (const [name, make] of [["slime", enemySlime], ["bat", enemyBat], ["goblin", enemyGoblin]]) {
+  const img = make();
+  outline(img, 0, 0, E, E);
+  save(`public/assets/enemies/${name}.png`, img);
+}

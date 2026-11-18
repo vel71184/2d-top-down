@@ -15,13 +15,15 @@ export class Battler {
   queued = false;
 
   // ---- visuals ----
-  /** Feet position on screen (virtual px). */
+  /** Feet position on screen (UI units). */
   homeX = 0;
   homeY = 0;
   offsetX = 0;
   flash = 0;
   shake = 0;
   fade = 1;
+  /** World pixels per UI unit (set by the battle scene). */
+  worldScale = 1;
 
   constructor(
     readonly side: Side,
@@ -50,11 +52,17 @@ export class Battler {
     return (this.stats.spd + 10) / 60;
   }
 
-  get scale(): number {
+  /** Art zoom in battle: each art pixel is drawn this many world pixels wide (default 2). */
+  get zoom(): number {
     return this.side === "party" ? 2 : this.enemy?.scale ?? 2;
   }
 
-  /** Width/height on screen in virtual px. */
+  /** Battle positions are in UI units: UI units per art pixel. */
+  get scale(): number {
+    return this.zoom / this.worldScale;
+  }
+
+  /** Width/height on screen in UI units. */
   get size(): { w: number; h: number } {
     if (this.sprite) return { w: this.sprite.frameW * this.scale, h: this.sprite.frameH * this.scale };
     if (this.image) return { w: this.image.width * this.scale, h: this.image.height * this.scale };

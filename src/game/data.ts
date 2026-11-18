@@ -23,7 +23,7 @@ export interface EnemyDef {
   name: string;
   /** Image in public/assets/enemies. */
   image: string;
-  /** Drawing scale in battle (default 2). */
+  /** Art zoom in battle: each art pixel is drawn this many world pixels wide (default 2, same as the party). */
   scale?: number;
   stats: Stats;
   xp: number;

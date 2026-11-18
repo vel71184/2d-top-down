@@ -46,7 +46,7 @@ export class OverworldScene extends Scene {
       this.map = map;
       this.mapName = name;
       const c = center(spawn);
-      this.player.placeAt(c.x, c.y, (spawn.props.facing as Direction | undefined) ?? facing);
+      this.player.placeAt(c.x, c.y, map.tileW, (spawn.props.facing as Direction | undefined) ?? facing);
       this.doorArmed = false;
       this.error = null;
     } catch (e) {
@@ -154,16 +154,16 @@ export class OverworldScene extends Scene {
       }
     }
 
-    this.dialogue?.render(ui, d.width, d.height);
+    this.dialogue?.render(ui, d.uiWidth, d.uiHeight);
 
     if (this.fade) {
       ui.fillStyle = `rgba(0,0,0,${Math.max(0, Math.min(1, this.fade.alpha))})`;
-      ui.fillRect(0, 0, d.width, d.height);
+      ui.fillRect(0, 0, d.uiWidth, d.uiHeight);
     }
 
     if (this.error) {
       ui.fillStyle = "rgba(120,0,0,0.9)";
-      ui.fillRect(8, 8, d.width - 16, 40);
+      ui.fillRect(8, 8, d.uiWidth - 16, 40);
       ui.fillStyle = "#fff";
       ui.font = "9px monospace";
       ui.textAlign = "left";

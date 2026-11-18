@@ -40,7 +40,7 @@ function padAction(b: PadButton): Action | null {
 interface TouchButton {
   action: Action;
   label: string;
-  /** Position relative to the bottom-right corner, in virtual pixels. */
+  /** Position relative to the bottom-right corner, in UI units. */
   dx: number;
   dy: number;
   r: number;
@@ -79,7 +79,7 @@ export class Input {
   private pad: PadState = { buttons: new Set(), x: 0, y: 0 };
 
   private queuedTaps: { x: number; y: number }[] = [];
-  /** Screen taps / clicks this update step, in virtual coordinates (for menus and targets). */
+  /** Screen taps / clicks this update step, in UI units. */
   taps: { x: number; y: number }[] = [];
 
   private navDir: NavDir | null = null;
@@ -221,13 +221,13 @@ export class Input {
   }
 
   private buttonCenter(b: TouchButton): { x: number; y: number } {
-    return { x: this.display.width - b.dx, y: this.display.height - b.dy };
+    return { x: this.display.uiWidth - b.dx, y: this.display.uiHeight - b.dy };
   }
 
   private onPointerDown(e: PointerEvent): void {
     if (e.pointerType === "touch") this.touchMode = true;
     e.preventDefault();
-    const p = this.display.toVirtual(e.clientX, e.clientY);
+    const p = this.display.toUi(e.clientX, e.clientY);
     if (e.pointerType === "mouse" && !this.touchMode) {
       this.queuedTaps.push(p);
       return;
@@ -242,7 +242,7 @@ export class Input {
         return;
       }
     }
-    if (this.virtualPad && p.x < this.display.width * 0.55 && this.stickPointer === null) {
+    if (this.virtualPad && p.x < this.display.uiWidth * 0.55 && this.stickPointer === null) {
       // Joystick side: becomes a tap only if released without dragging (see onPointerUp).
       this.stickPointer = e.pointerId;
       this.stickOrigin = p;
@@ -255,7 +255,7 @@ export class Input {
 
   private onPointerMove(e: PointerEvent): void {
     if (e.pointerId !== this.stickPointer) return;
-    const p = this.display.toVirtual(e.clientX, e.clientY);
+    const p = this.display.toUi(e.clientX, e.clientY);
     this.stickStart.moved = Math.max(this.stickStart.moved, Math.hypot(p.x - this.stickStart.x, p.y - this.stickStart.y));
     // Let the joystick base follow the finger if dragged far, so it never "runs out".
     const dx = p.x - this.stickOrigin.x, dy = p.y - this.stickOrigin.y;
@@ -281,7 +281,7 @@ export class Input {
     }
   }
 
-  /** Draws touch controls on the UI layer (virtual coordinates). */
+  /** Draws touch controls on the UI layer (UI units). */
   render(ctx: CanvasRenderingContext2D): void {
     if (!this.touchMode || !this.virtualPad) return;
     ctx.save();
@@ -302,7 +302,7 @@ export class Input {
       ctx.strokeStyle = "#fff";
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(52, this.display.height - 52, STICK_RADIUS, 0, Math.PI * 2);
+      ctx.arc(52, this.display.uiHeight - 52, STICK_RADIUS, 0, Math.PI * 2);
       ctx.stroke();
     }
     ctx.textAlign = "center";
