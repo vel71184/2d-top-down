@@ -65,6 +65,7 @@ Steps for a new map:
 | `door` | anything | `map` (target map name), `spawn` (spawn name there) | Walking onto it moves the player to another map |
 | `sign` | anything | `text`, with pages separated by `\|` | A to read |
 | `npc` | speaker name | `text` | Like a sign, but shows the speaker's name (NPC sprites come later) |
+| `secret` | anything | `presses` (default 3), `tile` (tile name to show once open, e.g. `door`; leave out to just remove the wall), `map` + `spawn` (optional: once open it works as a door), `text` (message when it opens) | A hidden passage. Face it and press A `presses` times without moving or turning (any step or turn resets the count). Its solid tiles open up, and it stays open (saved) |
 | `shop` | shop name | `items` (comma list of item/equipment ids), `text` (greeting) | Interact to buy and sell |
 | `inn` | innkeeper name | `price`, `text` | Interact to rest: full HP/MP for the price |
 | any of the above | | `sprite` (a sheet in `assets/sprites`, e.g. `merchant`), `facing` | Draws the object as a character, who turns to face you when you talk. Characters are solid |

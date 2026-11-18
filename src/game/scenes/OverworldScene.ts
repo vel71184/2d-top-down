@@ -61,6 +61,11 @@ export class OverworldScene extends Scene {
   private encounterDist = 0;
   private lastDistance = 0;
   private flash: { t: number; start: () => void } | null = null;
+  /** Hidden passages: A presses so far, and where the player stood for them. */
+  private secretPresses = 0;
+  private secretAt: { obj: MapObject; x: number; y: number; facing: Direction } | null = null;
+  private shake = 0;
+  private lastFacing: Direction = "down";
   private time = 0;
   private readonly noEncounters = new URLSearchParams(location.search).has("noencounters");
 
@@ -104,6 +109,10 @@ export class OverworldScene extends Scene {
       this.encounterDist = 0;
       this.lastDistance = this.player.distance;
       this.ignoreEnemy = null;
+      // Hidden passages opened earlier stay open.
+      for (const o of map.objects) if (o.type === "secret" && this.rpg.state.flags.has(secretFlag(name, o))) this.openSecret(map, o, false);
+      this.secretPresses = 0;
+      this.secretAt = null;
       this.enemies = await this.loadEnemies(map, name);
       this.actors = await this.loadActors(map);
     } catch (e) {
@@ -146,6 +155,7 @@ export class OverworldScene extends Scene {
     const input = this.game.input;
     this.time += dt;
     this.rpg.state.playTime += dt;
+    this.shake = Math.max(0, this.shake - dt);
 
     if (this.flash) {
       this.flash.t += dt;
@@ -193,6 +203,12 @@ export class OverworldScene extends Scene {
     this.player.update(dt, input, map, blockers);
     const moved = this.player.distance - this.lastDistance;
     this.lastDistance = this.player.distance;
+    // Any step or turn resets a hidden passage's press count.
+    if (moved > 0 || this.player.facing !== this.lastFacing) {
+      this.secretPresses = 0;
+      this.secretAt = null;
+    }
+    this.lastFacing = this.player.facing;
 
     if (input.pressed("confirm")) this.interact(map);
     if (this.dialogue || this.fade?.dir === 1) return;
@@ -226,8 +242,10 @@ export class OverworldScene extends Scene {
       }
     }
 
-    // Doors
-    const doors = map.objectsAt(this.player.cx, this.player.cy, "door");
+    // Doors (including opened secret passages that lead to another map)
+    const doors = map.objectsAt(this.player.cx, this.player.cy).filter(
+      (o) => o.type === "door" || (o.type === "secret" && o.props.map && this.rpg.state.flags.has(secretFlag(this.mapName, o))),
+    );
     if (doors.length === 0) this.doorArmed = true;
     else if (this.doorArmed && !this.fade) this.useDoor(doors[0]);
   }
@@ -237,7 +255,11 @@ export class OverworldScene extends Scene {
     const enemy = this.enemies.find((e) => p.x >= e.obj.x && p.x < e.obj.x + e.obj.width && p.y >= e.obj.y && p.y < e.obj.y + e.obj.height);
     if (enemy) return this.engage(enemy);
     const target = map.objectsAt(p.x, p.y).find((o) => ["sign", "npc", "battle", "shop", "inn"].includes(o.type));
-    if (!target) return;
+    if (!target) {
+      const secret = map.objectsAt(p.x, p.y, "secret").find((o) => !this.rpg.state.flags.has(secretFlag(this.mapName, o)));
+      if (secret) this.pressSecret(map, secret);
+      return;
+    }
     // Characters turn to face you when you talk to them.
     const actor = this.actors.find((a) => a.obj === target);
     if (actor) actor.facing = ({ up: "down", down: "up", left: "right", right: "left" } as const)[this.player.facing];
@@ -260,6 +282,32 @@ export class OverworldScene extends Scene {
     const text = String(target.props.text ?? "...");
     const speaker = target.type === "npc" ? target.name || undefined : undefined;
     this.dialogue = new DialogueBox(text.split("|"), speaker);
+  }
+
+  /**
+   * Hidden passage: press A `presses` times (default 3) while facing it,
+   * without moving or turning in between. Moving resets the count.
+   */
+  private pressSecret(map: TileMap, obj: MapObject): void {
+    const { x, y } = this.player.anchor;
+    const facing = this.player.facing;
+    const prev = this.secretAt;
+    const still = prev && prev.obj === obj && prev.facing === facing && Math.abs(prev.x - x) < 0.5 && Math.abs(prev.y - y) < 0.5;
+    this.secretPresses = still ? this.secretPresses + 1 : 1;
+    this.secretAt = { obj, x, y, facing };
+    if (this.secretPresses < Number(obj.props.presses ?? 3)) return;
+    this.secretPresses = 0;
+    this.secretAt = null;
+    this.rpg.state.flags.add(secretFlag(this.mapName, obj));
+    this.openSecret(map, obj, true);
+  }
+
+  private openSecret(map: TileMap, obj: MapObject, announce: boolean): void {
+    const gid = obj.props.tile ? map.tileByName(String(obj.props.tile)) : 0;
+    map.openArea(obj.x, obj.y, obj.width, obj.height, gid);
+    if (!announce) return;
+    this.shake = 0.45;
+    this.dialogue = new DialogueBox(String(obj.props.text ?? "Something clicked... a hidden passage opened!").split("|"));
   }
 
   /** Inn: pay to fully restore the party. */
@@ -361,6 +409,11 @@ export class OverworldScene extends Scene {
     const map = this.map;
     if (map) {
       this.cam.follow(this.player.cx, this.player.cy, d.width, d.height, map.pixelWidth, map.pixelHeight);
+      if (this.shake > 0) {
+        const k = Math.min(1, this.shake / 0.2) * (map.tileW / 8);
+        this.cam.x += Math.round((Math.random() - 0.5) * 2 * k);
+        this.cam.y += Math.round((Math.random() - 0.5) * 2 * k);
+      }
       map.draw(world, this.cam, false);
       // Characters back-to-front, so whoever is lower on screen is drawn in front.
       const playerFeet = this.player.body.y + this.player.body.h;
@@ -432,6 +485,10 @@ export class OverworldScene extends Scene {
     ctx.fill();
     ctx.drawImage(e.image, x, y + bob, w, h);
   }
+}
+
+function secretFlag(mapName: string, o: MapObject): string {
+  return `secret:${mapName}:${o.id}`;
 }
 
 function enemyList(o: MapObject): string[] {

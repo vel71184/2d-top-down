@@ -114,6 +114,8 @@ export class TileMap {
   readonly objects: MapObject[] = [];
   private layers: TileLayer[] = [];
   private solid: Uint8Array;
+  /** Cells blocked by a "collision" layer (kept separately so tile changes can recompute `solid`). */
+  private collision: Uint8Array;
 
   private constructor(data: TiledMap, private tilesets: Tileset[]) {
     this.width = data.width;
@@ -122,6 +124,7 @@ export class TileMap {
     this.tileH = data.tileheight;
     this.props = propsOf(data.properties);
     this.solid = new Uint8Array(this.width * this.height);
+    this.collision = new Uint8Array(this.width * this.height);
 
     let seenObjects = false;
     for (const layer of flattenLayers(data.layers)) {
@@ -145,6 +148,7 @@ export class TileMap {
         const tiles = Uint32Array.from(layer.data, (g) => g & GID_MASK);
         tiles.forEach((gid, i) => {
           if (!gid) return;
+          if (isCollision) this.collision[i] = 1;
           if (isCollision || this.tileProp(gid, "solid") === true) this.solid[i] = 1;
         });
         if (!isCollision) {
@@ -222,6 +226,38 @@ export class TileMap {
     const y0 = Math.floor(y / this.tileH), y1 = Math.floor((y + h - 0.001) / this.tileH);
     for (let ty = y0; ty <= y1; ty++) for (let tx = x0; tx <= x1; tx++) if (this.isSolidTile(tx, ty)) return true;
     return false;
+  }
+
+  /** Finds a tile by its `name` property in the tileset (e.g. "door"); returns its global id or 0. */
+  tileByName(name: string): number {
+    for (const ts of this.tilesets)
+      for (const [id, props] of ts.tileProps) if (props.name === name) return ts.firstgid + id;
+    return 0;
+  }
+
+  /**
+   * Opens up a rectangle of the map (hidden passages): every solid tile in it is
+   * replaced with `gid` (or removed when 0) and the area becomes walkable.
+   */
+  openArea(px: number, py: number, pw: number, ph: number, gid = 0): void {
+    const x0 = Math.floor(px / this.tileW), y0 = Math.floor(py / this.tileH);
+    const x1 = Math.ceil((px + pw) / this.tileW) - 1, y1 = Math.ceil((py + ph) / this.tileH) - 1;
+    for (let ty = Math.max(0, y0); ty <= Math.min(this.height - 1, y1); ty++) {
+      for (let tx = Math.max(0, x0); tx <= Math.min(this.width - 1, x1); tx++) {
+        const i = ty * this.width + tx;
+        let replaced = false;
+        // Replace the top-most solid tile; remove solid tiles beneath it.
+        for (let l = this.layers.length - 1; l >= 0; l--) {
+          const layer = this.layers[l];
+          const g = layer.data[i];
+          if (!g || this.tileProp(g, "solid") !== true) continue;
+          layer.data[i] = !replaced && gid ? gid : 0;
+          replaced = true;
+        }
+        this.collision[i] = 0;
+        this.solid[i] = this.layers.some((l) => l.data[i] && this.tileProp(l.data[i], "solid") === true) ? 1 : 0;
+      }
+    }
   }
 
   findObject(type: string, name?: string): MapObject | undefined {
