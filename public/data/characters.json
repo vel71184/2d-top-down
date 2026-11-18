@@ -1,0 +1,24 @@
+{
+  "startingParty": ["aren", "lyra", "bram"],
+  "startingItems": { "potion": 5, "ether": 2, "revive": 1 },
+  "characters": {
+    "aren": {
+      "name": "Aren",
+      "sprite": "aren",
+      "stats": { "hp": 120, "mp": 20, "atk": 18, "def": 10, "mag": 8, "spd": 14 },
+      "skills": ["power_strike", "cross_slash"]
+    },
+    "lyra": {
+      "name": "Lyra",
+      "sprite": "lyra",
+      "stats": { "hp": 85, "mp": 45, "atk": 8, "def": 7, "mag": 20, "spd": 12 },
+      "skills": ["fire", "ice", "thunder", "heal"]
+    },
+    "bram": {
+      "name": "Bram",
+      "sprite": "bram",
+      "stats": { "hp": 160, "mp": 15, "atk": 15, "def": 16, "mag": 5, "spd": 8 },
+      "skills": ["shield_bash", "second_wind"]
+    }
+  }
+}

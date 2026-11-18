@@ -1,0 +1,13 @@
+{
+  "attack":       { "name": "Attack",       "type": "physical", "power": 100, "mp": 0, "target": "enemy" },
+  "power_strike": { "name": "Power Strike", "type": "physical", "power": 170, "mp": 4, "target": "enemy", "desc": "A heavy blow to one enemy." },
+  "cross_slash":  { "name": "Cross Slash",  "type": "physical", "power": 85,  "mp": 8, "target": "all_enemies", "desc": "Strikes every enemy." },
+  "fire":         { "name": "Fire",         "type": "magic", "element": "fire",    "power": 110, "mp": 4, "target": "enemy", "desc": "Fire damage to one enemy." },
+  "ice":          { "name": "Ice",          "type": "magic", "element": "ice",     "power": 110, "mp": 4, "target": "enemy", "desc": "Ice damage to one enemy." },
+  "thunder":      { "name": "Thunder",      "type": "magic", "element": "thunder", "power": 75,  "mp": 9, "target": "all_enemies", "desc": "Lightning strikes all enemies." },
+  "heal":         { "name": "Heal",         "type": "heal",  "power": 100, "mp": 5, "target": "ally", "desc": "Restores HP to one ally." },
+  "shield_bash":  { "name": "Shield Bash",  "type": "physical", "power": 140, "mp": 3, "target": "enemy", "desc": "Slams one enemy with a shield." },
+  "second_wind":  { "name": "Second Wind",  "type": "heal",  "power": 160, "mp": 4, "target": "self", "desc": "Recover your own HP." },
+  "bite":         { "name": "Bite",         "type": "physical", "power": 125, "mp": 0, "target": "enemy" },
+  "club_smash":   { "name": "Club Smash",   "type": "physical", "power": 160, "mp": 0, "target": "enemy" }
+}

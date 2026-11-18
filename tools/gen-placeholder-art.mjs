@@ -186,50 +186,111 @@ const draw = {
 };
 tiles.forEach((name, i) => draw[name]((i % COLS) * T, Math.floor(i / COLS) * T));
 
-// ---------- hero sprite sheet ----------
+// ---------- character sprite sheets ----------
 // 4 columns (walk frames: stand, step, stand, step) x 4 rows (down, left, right, up).
-const hero = image(4 * T, 4 * T);
-const SKIN = "#f1c79a", HAIR = "#5a3a1e", TUNIC = "#3a6fd0", TUNIC_D = "#28509c", BOOT = "#3b2a1a", OUT = "#1c1a24";
-function drawHero(ox, oy, dir, frame) {
+const OUT = "#1c1a24";
+const PALETTES = {
+  aren: { skin: "#f1c79a", hair: "#5a3a1e", tunic: "#3a6fd0", tunicD: "#28509c", boot: "#3b2a1a" },
+  lyra: { skin: "#f6d3b3", hair: "#e0b44a", tunic: "#8a46b8", tunicD: "#62308a", boot: "#4a2a5a", hat: "#4a2a7a" },
+  bram: { skin: "#d9a57a", hair: "#2a2a2a", tunic: "#8a909c", tunicD: "#5e6470", boot: "#3a3a44", helmet: "#a9b0bc" },
+};
+function drawChar(img, ox, oy, dir, frame, P) {
   const step = frame === 1 ? 1 : frame === 3 ? -1 : 0;
-  // shadow
-  rect(hero, ox + 4, oy + 15, 8, 1, [0, 0, 0, 70]);
-  // legs
-  const lx = ox + 5, rx = ox + 9;
-  rect(hero, lx, oy + 12 - (step > 0 ? 1 : 0), 2, 3, BOOT);
-  rect(hero, rx, oy + 12 - (step < 0 ? 1 : 0), 2, 3, BOOT);
-  // body
-  rect(hero, ox + 4, oy + 8, 8, 5, TUNIC);
-  rect(hero, ox + 4, oy + 12, 8, 1, TUNIC_D);
-  // arms
+  rect(img, ox + 4, oy + 15, 8, 1, [0, 0, 0, 70]);
+  rect(img, ox + 5, oy + 12 - (step > 0 ? 1 : 0), 2, 3, P.boot);
+  rect(img, ox + 9, oy + 12 - (step < 0 ? 1 : 0), 2, 3, P.boot);
+  rect(img, ox + 4, oy + 8, 8, 5, P.tunic);
+  rect(img, ox + 4, oy + 12, 8, 1, P.tunicD);
   if (dir === "left" || dir === "right") {
-    rect(hero, ox + 7 + step, oy + 9, 2, 3, TUNIC_D);
+    rect(img, ox + 7 + step, oy + 9, 2, 3, P.tunicD);
   } else {
-    rect(hero, ox + 3, oy + 9 + (step > 0 ? -1 : 0), 1, 3, SKIN);
-    rect(hero, ox + 12, oy + 9 + (step < 0 ? -1 : 0), 1, 3, SKIN);
+    rect(img, ox + 3, oy + 9 + (step > 0 ? -1 : 0), 1, 3, P.skin);
+    rect(img, ox + 12, oy + 9 + (step < 0 ? -1 : 0), 1, 3, P.skin);
   }
-  // head
-  rect(hero, ox + 4, oy + 2, 8, 6, SKIN);
-  rect(hero, ox + 4, oy + 1, 8, 2, HAIR);
-  if (dir === "up") rect(hero, ox + 4, oy + 1, 8, 6, HAIR);
+  rect(img, ox + 4, oy + 2, 8, 6, P.skin);
+  rect(img, ox + 4, oy + 1, 8, 2, P.hair);
+  if (dir === "up") rect(img, ox + 4, oy + 1, 8, 6, P.hair);
   if (dir === "down") {
-    pset(hero, ox + 6, oy + 5, OUT);
-    pset(hero, ox + 9, oy + 5, OUT);
-    rect(hero, ox + 4, oy + 3, 1, 2, HAIR);
-    rect(hero, ox + 11, oy + 3, 1, 2, HAIR);
+    pset(img, ox + 6, oy + 5, OUT);
+    pset(img, ox + 9, oy + 5, OUT);
+    rect(img, ox + 4, oy + 3, 1, 2, P.hair);
+    rect(img, ox + 11, oy + 3, 1, 2, P.hair);
   }
   if (dir === "left") {
-    rect(hero, ox + 8, oy + 2, 4, 4, HAIR);
-    pset(hero, ox + 5, oy + 5, OUT);
+    rect(img, ox + 8, oy + 2, 4, 4, P.hair);
+    pset(img, ox + 5, oy + 5, OUT);
   }
   if (dir === "right") {
-    rect(hero, ox + 4, oy + 2, 4, 4, HAIR);
-    pset(hero, ox + 10, oy + 5, OUT);
+    rect(img, ox + 4, oy + 2, 4, 4, P.hair);
+    pset(img, ox + 10, oy + 5, OUT);
+  }
+  if (P.hat) {
+    // pointed wizard hat
+    rect(img, ox + 3, oy + 2, 10, 1, P.hat);
+    rect(img, ox + 5, oy + 0, 6, 2, P.hat);
+  }
+  if (P.helmet) {
+    rect(img, ox + 4, oy + 1, 8, 2, P.helmet);
+    if (dir !== "up") rect(img, ox + 4, oy + 3, 1, 2, P.helmet), rect(img, ox + 11, oy + 3, 1, 2, P.helmet);
+    else rect(img, ox + 4, oy + 1, 8, 5, P.helmet);
   }
 }
-["down", "left", "right", "up"].forEach((dir, row) => {
-  for (let f = 0; f < 4; f++) drawHero(f * T, row * T, dir, f);
-});
+const sheets = {};
+for (const [name, P] of Object.entries(PALETTES)) {
+  const img = image(4 * T, 4 * T);
+  ["down", "left", "right", "up"].forEach((dir, row) => {
+    for (let f = 0; f < 4; f++) drawChar(img, f * T, row * T, dir, f, P);
+  });
+  sheets[name] = img;
+}
+
+// ---------- enemies (32x32, single frame; the game animates them) ----------
+const E = 32;
+function enemySlime() {
+  const img = image(E, E);
+  rect(img, 6, 29, 20, 2, [0, 0, 0, 70]);
+  for (let y = 0; y < 18; y++) {
+    const half = Math.round(Math.sqrt(1 - ((17 - y) / 18) ** 2) * 13);
+    rect(img, 16 - half, 12 + y, half * 2, 1, y < 4 ? "#7ee06a" : "#4fbf45");
+  }
+  rect(img, 6, 28, 20, 2, "#2f8a2c");
+  rect(img, 10, 16, 3, 3, "#c8f7b8");
+  rect(img, 11, 19, 3, 3, OUT); rect(img, 19, 19, 3, 3, OUT);
+  pset(img, 11, 19, "#fff"); pset(img, 19, 19, "#fff");
+  rect(img, 14, 24, 4, 1, "#2f8a2c");
+  return img;
+}
+function enemyBat() {
+  const img = image(E, E);
+  rect(img, 10, 29, 12, 2, [0, 0, 0, 50]);
+  // wings
+  for (let i = 0; i < 10; i++) {
+    rect(img, 2 + i, 8 + Math.abs(5 - i), 1, 8 - Math.abs(5 - i) / 2 | 0, "#5a3a8a");
+    rect(img, 29 - i, 8 + Math.abs(5 - i), 1, 8 - Math.abs(5 - i) / 2 | 0, "#5a3a8a");
+  }
+  disc(img, 16, 13, 6, "#3c2660");
+  rect(img, 11, 5, 2, 4, "#3c2660"); rect(img, 19, 5, 2, 4, "#3c2660");
+  rect(img, 13, 11, 2, 2, "#ff5050"); rect(img, 17, 11, 2, 2, "#ff5050");
+  pset(img, 14, 16, "#fff"); pset(img, 17, 16, "#fff");
+  return img;
+}
+function enemyGoblin() {
+  const img = image(E, E);
+  rect(img, 7, 29, 18, 2, [0, 0, 0, 70]);
+  rect(img, 11, 24, 4, 5, "#4a3420"); rect(img, 17, 24, 4, 5, "#4a3420");
+  rect(img, 9, 15, 14, 10, "#7a5a32");
+  rect(img, 9, 20, 14, 2, "#5a4022");
+  rect(img, 6, 16, 3, 7, "#5aa04a"); rect(img, 23, 16, 3, 7, "#5aa04a");
+  // club
+  rect(img, 25, 8, 3, 14, "#8a5a2e"); rect(img, 24, 5, 5, 5, "#6b4423");
+  rect(img, 10, 5, 12, 10, "#6ab85a");
+  rect(img, 6, 7, 4, 3, "#6ab85a"); rect(img, 22, 7, 4, 3, "#6ab85a");
+  rect(img, 12, 9, 2, 2, "#ffe14a"); rect(img, 18, 9, 2, 2, "#ffe14a");
+  pset(img, 13, 10, OUT); pset(img, 19, 10, OUT);
+  rect(img, 13, 13, 6, 1, "#2f5a28");
+  pset(img, 14, 14, "#fff"); pset(img, 17, 14, "#fff");
+  return img;
+}
 
 // ---------- write ----------
 function save(path, img) {
@@ -238,4 +299,7 @@ function save(path, img) {
   console.log("wrote", path);
 }
 save("public/assets/tilesets/overworld.png", ts);
-save("public/assets/sprites/hero.png", hero);
+for (const [name, img] of Object.entries(sheets)) save(`public/assets/sprites/${name}.png`, img);
+save("public/assets/enemies/slime.png", enemySlime());
+save("public/assets/enemies/bat.png", enemyBat());
+save("public/assets/enemies/goblin.png", enemyGoblin());

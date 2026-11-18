@@ -1,7 +1,10 @@
 import { assetUrl } from "./engine/assets";
 import { Game } from "./engine/game";
 import { SpriteSheet } from "./engine/sprite";
+import type { RPG } from "./game/context";
+import { loadDatabase } from "./game/data";
 import { OverworldScene } from "./game/scenes/OverworldScene";
+import { GameState } from "./game/state";
 
 async function boot(): Promise<void> {
   const game = new Game(
@@ -9,16 +12,29 @@ async function boot(): Promise<void> {
     document.getElementById("ui") as HTMLCanvasElement,
   );
 
-  // Handy for testing your own maps: ?map=house&spawn=entrance (add &debug to see collision).
-  const params = new URLSearchParams(location.search);
-  const startMap = params.get("map") ?? "town";
-  const startSpawn = params.get("spawn") ?? "start";
+  const db = await loadDatabase();
+  const state = GameState.newGame(db);
+  const sprites = new Map<string, SpriteSheet>();
+  await Promise.all(
+    Object.values(db.characters).map(async (c) => {
+      sprites.set(c.sprite, await SpriteSheet.load(assetUrl(`assets/sprites/${c.sprite}.json`)));
+    }),
+  );
+  const rpg: RPG = { game, db, state, sprites };
 
-  const hero = await SpriteSheet.load(assetUrl("assets/sprites/hero.json"));
-  await game.scenes.push(new OverworldScene(game, hero, startMap, startSpawn));
+  // Testing options:
+  //   ?map=house&spawn=entrance   start on a specific map / spawn point
+  //   ?battle=slime,bat           start straight into a battle
+  //   ?debug                      show collision boxes and FPS
+  const params = new URLSearchParams(location.search);
+  const overworld = new OverworldScene(rpg, params.get("map") ?? "town", params.get("spawn") ?? "start");
+  await game.scenes.push(overworld);
+  const battle = params.get("battle");
+  if (battle) overworld.startBattle(battle.split(","));
   game.start();
+
   // Exposed for automated testing / poking around in the browser console with ?debug.
-  if (game.debug) (window as unknown as { game: Game }).game = game;
+  if (game.debug) Object.assign(window, { rpg, game });
 }
 
 boot().catch((e) => {

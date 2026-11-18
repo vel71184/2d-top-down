@@ -1,0 +1,26 @@
+{
+  "slime": {
+    "name": "Slime",
+    "image": "slime.png",
+    "stats": { "hp": 40, "mp": 0, "atk": 10, "def": 4, "mag": 4, "spd": 6 },
+    "xp": 6, "gold": 4,
+    "weak": ["fire"],
+    "actions": [{ "skill": "attack", "weight": 1 }]
+  },
+  "bat": {
+    "name": "Bat",
+    "image": "bat.png",
+    "stats": { "hp": 30, "mp": 0, "atk": 12, "def": 3, "mag": 6, "spd": 18 },
+    "xp": 8, "gold": 5,
+    "weak": ["thunder"],
+    "actions": [{ "skill": "attack", "weight": 3 }, { "skill": "bite", "weight": 1 }]
+  },
+  "goblin": {
+    "name": "Goblin",
+    "image": "goblin.png",
+    "stats": { "hp": 110, "mp": 0, "atk": 16, "def": 10, "mag": 2, "spd": 10 },
+    "xp": 20, "gold": 15,
+    "weak": ["ice"],
+    "actions": [{ "skill": "attack", "weight": 3 }, { "skill": "club_smash", "weight": 1 }]
+  }
+}

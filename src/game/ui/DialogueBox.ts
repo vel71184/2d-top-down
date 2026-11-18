@@ -1,4 +1,5 @@
 import type { Input } from "../../engine/input";
+import { FONT_FAMILY, roundRect } from "./theme";
 
 const CHARS_PER_SECOND = 45;
 const PAD = 8;
@@ -47,7 +48,7 @@ export class DialogueBox {
     ctx.fill();
     ctx.stroke();
 
-    ctx.font = `${FONT_SIZE}px "Trebuchet MS", "Segoe UI", sans-serif`;
+    ctx.font = `${FONT_SIZE}px ${FONT_FAMILY}`;
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
     if (this.speaker) {
@@ -86,14 +87,4 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, maxW: number): string
     out.push(line);
   }
   return out;
-}
-
-export function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.arcTo(x + w, y, x + w, y + h, r);
-  ctx.arcTo(x + w, y + h, x, y + h, r);
-  ctx.arcTo(x, y + h, x, y, r);
-  ctx.arcTo(x, y, x + w, y, r);
-  ctx.closePath();
 }

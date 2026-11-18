@@ -1,9 +1,10 @@
 import { assetUrl } from "../../engine/assets";
 import { Camera } from "../../engine/camera";
-import type { Game } from "../../engine/game";
 import { Scene } from "../../engine/scene";
-import type { Direction, SpriteSheet } from "../../engine/sprite";
+import type { Direction } from "../../engine/sprite";
 import { TileMap, type MapObject } from "../../engine/tilemap";
+import { BattleScene, type BattleOptions, type BattleResult } from "../battle/BattleScene";
+import type { RPG } from "../context";
 import { Player } from "../entities/Player";
 import { DialogueBox } from "../ui/DialogueBox";
 
@@ -12,7 +13,7 @@ const FADE_SPEED = 4; // full fade in 0.25s
 type Fade = { dir: 1 | -1; alpha: number; onBlack?: () => Promise<void> };
 
 /**
- * Walking around a map: movement, camera, doors between maps and signs.
+ * Walking around a map: movement, camera, doors between maps, signs and fights.
  * Maps live in public/assets/maps/<name>.tmj and are made with Tiled.
  */
 export class OverworldScene extends Scene {
@@ -21,14 +22,16 @@ export class OverworldScene extends Scene {
   private readonly player: Player;
   private readonly cam = new Camera();
   private dialogue: DialogueBox | null = null;
+  private afterDialogue: (() => void) | null = null;
   private fade: Fade | null = { dir: -1, alpha: 1 };
   /** Doors only trigger after the player has stepped off every door (prevents ping-pong). */
   private doorArmed = false;
   private error: string | null = null;
 
-  constructor(game: Game, heroSprite: SpriteSheet, private startMap: string, private startSpawn: string) {
-    super(game);
-    this.player = new Player(heroSprite);
+  constructor(private rpg: RPG, private startMap: string, private startSpawn: string) {
+    super(rpg.game);
+    const leader = rpg.state.party[0];
+    this.player = new Player(rpg.sprites.get(leader.def.sprite)!);
   }
 
   async enter(): Promise<void> {
@@ -73,7 +76,12 @@ export class OverworldScene extends Scene {
 
     if (this.dialogue) {
       this.dialogue.update(dt, input);
-      if (this.dialogue.done) this.dialogue = null;
+      if (this.dialogue.done) {
+        this.dialogue = null;
+        const next = this.afterDialogue;
+        this.afterDialogue = null;
+        next?.();
+      }
       return;
     }
 
@@ -89,11 +97,37 @@ export class OverworldScene extends Scene {
 
   private interact(map: TileMap): void {
     const p = this.player.facingPoint();
-    const target = map.objectsAt(p.x, p.y).find((o) => o.type === "sign" || o.type === "npc");
+    const target = map.objectsAt(p.x, p.y).find((o) => ["sign", "npc", "battle"].includes(o.type));
     if (!target) return;
+    if (target.type === "battle") {
+      const fight = () => this.startBattle(String(target.props.enemies ?? "slime").split(",").map((s) => s.trim()), {
+        canFlee: target.props.canFlee !== false,
+      });
+      if (target.props.text) {
+        this.dialogue = new DialogueBox(String(target.props.text).split("|"));
+        this.afterDialogue = fight;
+      } else fight();
+      return;
+    }
     const text = String(target.props.text ?? "...");
     const speaker = target.type === "npc" ? target.name || undefined : undefined;
     this.dialogue = new DialogueBox(text.split("|"), speaker);
+  }
+
+  /** Fades out, runs a battle on top of this scene, then fades back in. */
+  startBattle(enemyIds: string[], options: BattleOptions = {}): void {
+    if (this.fade?.dir === 1) return; // already leaving
+    this.fade = {
+      dir: 1,
+      alpha: this.fade?.alpha ?? 0,
+      onBlack: () =>
+        this.game.scenes.push(
+          new BattleScene(this.rpg, enemyIds, options, (result: BattleResult) => {
+            if (result === "defeat") this.rpg.state.restoreParty();
+            this.game.input.reset();
+          }),
+        ),
+    };
   }
 
   private useDoor(door: MapObject): void {

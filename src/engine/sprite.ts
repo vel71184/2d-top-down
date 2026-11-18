@@ -31,11 +31,11 @@ export class SpriteSheet {
     return this.data.frameHeight;
   }
 
-  /** Draws the frame for `dir`; `walkTime` in seconds (0 = standing). */
-  draw(ctx: CanvasRenderingContext2D, dir: Direction, walkTime: number, x: number, y: number): void {
+  /** Draws the frame for `dir` with its top-left at (x, y); `walkTime` in seconds (0 = standing). */
+  draw(ctx: CanvasRenderingContext2D, dir: Direction, walkTime: number, x: number, y: number, scale = 1): void {
     const d = this.data;
     const frames = d.walkFrames;
     const col = walkTime > 0 ? frames[Math.floor(walkTime * d.walkFps) % frames.length] : frames[0];
-    ctx.drawImage(this.image, col * d.frameWidth, d.rows[dir] * d.frameHeight, d.frameWidth, d.frameHeight, x, y, d.frameWidth, d.frameHeight);
+    ctx.drawImage(this.image, col * d.frameWidth, d.rows[dir] * d.frameHeight, d.frameWidth, d.frameHeight, x, y, d.frameWidth * scale, d.frameHeight * scale);
   }
 }

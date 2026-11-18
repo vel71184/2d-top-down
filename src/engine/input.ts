@@ -1,6 +1,11 @@
 import type { Display } from "./display";
 
 export type Action = "confirm" | "cancel" | "menu";
+export type NavDir = "up" | "down" | "left" | "right";
+
+const NAV_REPEAT_DELAY = 0.35;
+const NAV_REPEAT_RATE = 0.11;
+const STEP = 1 / 60;
 
 const KEY_ACTIONS: Record<string, Action> = {
   Space: "confirm",
@@ -47,23 +52,36 @@ export class Input {
   private keysDown = new Set<string>();
   private held = new Set<Action>();
   private pressedThisFrame = new Set<Action>();
-  private queued = new Set<Action>();
+  /** Discrete presses (keys and touch buttons) in the order they happened; one is handled per step. */
+  private events: (Action | NavDir)[] = [];
 
   private stickPointer: number | null = null;
   private stickOrigin = { x: 0, y: 0 };
   private stickPos = { x: 0, y: 0 };
   private buttonPointers = new Map<number, Action>();
 
+  private queuedTaps: { x: number; y: number }[] = [];
+  /** Screen taps / clicks this update step, in virtual coordinates (for menus and targets). */
+  taps: { x: number; y: number }[] = [];
+
+  private navDir: NavDir | null = null;
+  private navTimer = 0;
+  private navFired: NavDir | null = null;
+
   /** Touch controls are drawn once a touch has been seen. */
   touchMode = false;
+  /** On-screen joystick and buttons. Scenes driven by tapping (battles) turn it off; taps still register. */
+  virtualPad = true;
 
   constructor(private display: Display, target: HTMLElement) {
     window.addEventListener("keydown", (e) => {
       if (KEY_DIRS[e.code] || KEY_ACTIONS[e.code]) e.preventDefault();
       if (e.repeat) return;
       this.keysDown.add(e.code);
+      const d = KEY_DIRS[e.code];
+      if (d) this.events.push(d[0] < 0 ? "left" : d[0] > 0 ? "right" : d[1] < 0 ? "up" : "down");
       const a = KEY_ACTIONS[e.code];
-      if (a) this.queued.add(a);
+      if (a) this.events.push(a);
     });
     window.addEventListener("keyup", (e) => this.keysDown.delete(e.code));
     window.addEventListener("blur", () => this.reset());
@@ -78,8 +96,46 @@ export class Input {
 
   /** Call once at the start of each fixed update step. */
   update(): void {
-    this.pressedThisFrame = this.queued;
-    this.queued = new Set();
+    // Handle one queued press per step, so quick sequences like "down, down, A" keep their order.
+    const ev = this.events.shift();
+    this.pressedThisFrame = new Set();
+    let navEvent: NavDir | undefined;
+    if (ev === "up" || ev === "down" || ev === "left" || ev === "right") navEvent = ev;
+    else if (ev) this.pressedThisFrame.add(ev);
+    this.taps = this.queuedTaps;
+    this.queuedTaps = [];
+    this.updateNav(navEvent);
+  }
+
+  /** Menu navigation: fires once on press, then repeats while held (keys or joystick). */
+  nav(): NavDir | null {
+    return this.navFired;
+  }
+
+  private updateNav(queued?: NavDir): void {
+    const m = this.move();
+    let dir: NavDir | null = null;
+    if (Math.hypot(m.x, m.y) > 0.5) {
+      if (Math.abs(m.x) > Math.abs(m.y)) dir = m.x < 0 ? "left" : "right";
+      else dir = m.y < 0 ? "up" : "down";
+    }
+    this.navFired = null;
+    if (queued) {
+      // One queued key press per step, so quick sequences like "down, right" both count.
+      this.navFired = queued;
+      this.navDir = dir ?? queued;
+      this.navTimer = NAV_REPEAT_DELAY;
+    } else if (dir !== this.navDir) {
+      this.navDir = dir;
+      this.navTimer = NAV_REPEAT_DELAY;
+      this.navFired = dir;
+    } else if (dir) {
+      this.navTimer -= STEP;
+      if (this.navTimer <= 0) {
+        this.navTimer = NAV_REPEAT_RATE;
+        this.navFired = dir;
+      }
+    }
   }
 
   /** True only on the update step the action was pressed. */
@@ -119,6 +175,8 @@ export class Input {
     this.held.clear();
     this.stickPointer = null;
     this.buttonPointers.clear();
+    this.navDir = null;
+    this.events = [];
   }
 
   private buttonCenter(b: TouchButton): { x: number; y: number } {
@@ -127,20 +185,24 @@ export class Input {
 
   private onPointerDown(e: PointerEvent): void {
     if (e.pointerType === "touch") this.touchMode = true;
-    if (e.pointerType === "mouse" && !this.touchMode) return;
     e.preventDefault();
-    (e.target as Element).setPointerCapture?.(e.pointerId);
     const p = this.display.toVirtual(e.clientX, e.clientY);
-    for (const b of BUTTONS) {
+    if (e.pointerType === "mouse" && !this.touchMode) {
+      this.queuedTaps.push(p);
+      return;
+    }
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+    if (this.virtualPad) for (const b of BUTTONS) {
       const c = this.buttonCenter(b);
       if (Math.hypot(p.x - c.x, p.y - c.y) <= b.r + 6) {
         this.buttonPointers.set(e.pointerId, b.action);
         this.held.add(b.action);
-        this.queued.add(b.action);
+        this.events.push(b.action);
         return;
       }
     }
-    if (p.x < this.display.width * 0.55 && this.stickPointer === null) {
+    this.queuedTaps.push(p);
+    if (this.virtualPad && p.x < this.display.width * 0.55 && this.stickPointer === null) {
       this.stickPointer = e.pointerId;
       this.stickOrigin = p;
       this.stickPos = p;
@@ -172,7 +234,7 @@ export class Input {
 
   /** Draws touch controls on the UI layer (virtual coordinates). */
   render(ctx: CanvasRenderingContext2D): void {
-    if (!this.touchMode) return;
+    if (!this.touchMode || !this.virtualPad) return;
     ctx.save();
     if (this.stickPointer !== null) {
       ctx.globalAlpha = 0.35;
@@ -185,7 +247,7 @@ export class Input {
       ctx.beginPath();
       ctx.arc(this.stickOrigin.x + m.x * STICK_RADIUS, this.stickOrigin.y + m.y * STICK_RADIUS, 12, 0, Math.PI * 2);
       ctx.fill();
-    } else {
+    } else if (this.virtualPad) {
       // Hint where the joystick lives.
       ctx.globalAlpha = 0.18;
       ctx.strokeStyle = "#fff";
