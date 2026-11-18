@@ -15,6 +15,9 @@ npm run dev        # open the printed URL; use --host URL to try it on your phon
 Controls:
 - **Phone:** drag anywhere on the left side for the joystick. **A** confirms or interacts, **B** cancels, **☰** opens the menu (menu comes in a later stage). In battle, tap commands and targets directly; tap the battlefield to go back.
 - **Keyboard:** WASD or arrow keys to move or pick from menus. Space, Enter, Z or E to confirm or interact. Esc or X to cancel.
+- **Controller** (8BitDo, Xbox, PlayStation, etc.): left stick or D-pad to move and pick from menus. The **bottom** face button confirms or interacts, the **right** one cancels, and **Start** or the **top** button opens the menu. On-screen touch controls hide while you use a controller and come back when you touch the screen.
+  - Buttons are matched by position, not label. On an 8BitDo with Nintendo-style labels, the bottom button (printed "B") confirms. If you'd rather the right-hand button confirm, add `?nintendo` to the URL in a browser, or set `padSettings.swapConfirmCancel` in `src/engine/gamepad.ts` for the app.
+  - On Android, pair the controller over Bluetooth first. X-input mode (8BitDo: hold **X** while turning it on) is the most widely supported.
 
 Useful URL options:
 - `?map=house&spawn=entrance` starts on a specific map and spawn point.

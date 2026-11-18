@@ -1,4 +1,5 @@
 import type { Display } from "./display";
+import { Gamepads, padSettings, type PadButton, type PadState } from "./gamepad";
 
 export type Action = "confirm" | "cancel" | "menu";
 export type NavDir = "up" | "down" | "left" | "right";
@@ -26,6 +27,16 @@ const KEY_DIRS: Record<string, [number, number]> = {
   ArrowRight: [1, 0], KeyD: [1, 0],
 };
 
+const PAD_DIRS: PadButton[] = ["up", "down", "left", "right"];
+
+function padAction(b: PadButton): Action | null {
+  const swap = padSettings.swapConfirmCancel;
+  if (b === "a") return swap ? "cancel" : "confirm";
+  if (b === "b") return swap ? "confirm" : "cancel";
+  if (b === "start" || b === "y") return "menu";
+  return null;
+}
+
 interface TouchButton {
   action: Action;
   label: string;
@@ -45,8 +56,8 @@ const STICK_RADIUS = 28;
 const STICK_DEADZONE = 0.18;
 
 /**
- * Unified input: keyboard for desktop testing, a floating virtual joystick
- * (left half of the screen) and on-screen buttons for touch devices.
+ * Unified input: keyboard, game controllers, and for touch devices a floating
+ * virtual joystick (left half of the screen) plus on-screen buttons.
  */
 export class Input {
   private keysDown = new Set<string>();
@@ -59,6 +70,9 @@ export class Input {
   private stickOrigin = { x: 0, y: 0 };
   private stickPos = { x: 0, y: 0 };
   private buttonPointers = new Map<number, Action>();
+
+  private gamepads = new Gamepads();
+  private pad: PadState = { buttons: new Set(), x: 0, y: 0 };
 
   private queuedTaps: { x: number; y: number }[] = [];
   /** Screen taps / clicks this update step, in virtual coordinates (for menus and targets). */
@@ -96,6 +110,7 @@ export class Input {
 
   /** Call once at the start of each fixed update step. */
   update(): void {
+    this.pollGamepad();
     // Handle one queued press per step, so quick sequences like "down, down, A" keep their order.
     const ev = this.events.shift();
     this.pressedThisFrame = new Set();
@@ -105,6 +120,21 @@ export class Input {
     this.taps = this.queuedTaps;
     this.queuedTaps = [];
     this.updateNav(navEvent);
+  }
+
+  private pollGamepad(): void {
+    const prev = this.pad.buttons;
+    this.pad = this.gamepads.poll();
+    let used = this.pad.x !== 0 || this.pad.y !== 0;
+    for (const b of this.pad.buttons) {
+      if (prev.has(b)) continue;
+      used = true;
+      if ((PAD_DIRS as string[]).includes(b)) this.events.push(b as NavDir);
+      const a = padAction(b);
+      if (a) this.events.push(a);
+    }
+    // Playing with a controller hides the on-screen touch controls (touching the screen brings them back).
+    if (used) this.touchMode = false;
   }
 
   /** Menu navigation: fires once on press, then repeats while held (keys or joystick). */
@@ -146,6 +176,7 @@ export class Input {
   isHeld(action: Action): boolean {
     if (this.held.has(action)) return true;
     for (const [code, a] of Object.entries(KEY_ACTIONS)) if (a === action && this.keysDown.has(code)) return true;
+    for (const b of this.pad.buttons) if (padAction(b) === action) return true;
     return false;
   }
 
@@ -159,11 +190,17 @@ export class Input {
       const m = Math.min(1, len);
       return { x: (dx / len) * m, y: (dy / len) * m };
     }
+    // Controller analog stick
+    if (this.pad.x !== 0 || this.pad.y !== 0) return { x: this.pad.x, y: this.pad.y };
+    // Keyboard and controller D-pad
     let x = 0, y = 0;
     for (const code of this.keysDown) {
       const d = KEY_DIRS[code];
       if (d) { x += d[0]; y += d[1]; }
     }
+    const pb = this.pad.buttons;
+    x += (pb.has("right") ? 1 : 0) - (pb.has("left") ? 1 : 0);
+    y += (pb.has("down") ? 1 : 0) - (pb.has("up") ? 1 : 0);
     x = Math.sign(x);
     y = Math.sign(y);
     const len = Math.hypot(x, y);
