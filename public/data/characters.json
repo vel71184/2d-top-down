@@ -9,7 +9,8 @@
       "stats":  { "hp": 120, "mp": 20, "atk": 15, "def": 8, "mag": 8, "spd": 14 },
       "growth": { "hp": 14, "mp": 2, "atk": 2.2, "def": 1.4, "mag": 0.8, "spd": 0.8 },
       "skills": ["power_strike"],
-      "learn": { "4": "cross_slash" },
+      "learn": { "3": "piercing_thrust", "4": "cross_slash" },
+      "row": "front",
       "equip": { "weapon": "bronze_sword", "armor": "leather_vest" }
     },
     "lyra": {
@@ -19,6 +20,7 @@
       "growth": { "hp": 9, "mp": 5, "atk": 0.8, "def": 1, "mag": 2.4, "spd": 0.7 },
       "skills": ["fire", "heal"],
       "learn": { "2": "ice", "5": "thunder" },
+      "row": "back",
       "equip": { "weapon": "oak_staff", "armor": "leather_vest" }
     },
     "bram": {
@@ -27,7 +29,8 @@
       "stats":  { "hp": 160, "mp": 15, "atk": 12, "def": 13, "mag": 5, "spd": 8 },
       "growth": { "hp": 18, "mp": 1.5, "atk": 1.8, "def": 2, "mag": 0.5, "spd": 0.5 },
       "skills": ["shield_bash"],
-      "learn": { "3": "second_wind" },
+      "learn": { "2": "cover", "3": "second_wind" },
+      "row": "front",
       "equip": { "weapon": "bronze_axe", "armor": "leather_vest" }
     }
   }

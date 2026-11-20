@@ -1,5 +1,5 @@
 import type { Direction } from "../engine/sprite";
-import type { Database, Slot } from "./data";
+import type { Database, Row, Slot } from "./data";
 import { clampHpMp } from "./party";
 import { GameState } from "./state";
 
@@ -19,7 +19,7 @@ export interface SaveData {
   x: number;
   y: number;
   facing: Direction;
-  party: { id: string; level: number; xp: number; hp: number; mp: number; equip: Partial<Record<Slot, string | null>> }[];
+  party: { id: string; level: number; xp: number; hp: number; mp: number; equip: Partial<Record<Slot, string | null>>; row?: Row }[];
   inventory: [string, number][];
   gold: number;
   flags: string[];
@@ -38,7 +38,7 @@ export function makeSave(state: GameState, pos: Position): SaveData {
     savedAt: Date.now(),
     playTime: Math.floor(state.playTime),
     ...pos,
-    party: state.party.map((m) => ({ id: m.id, level: m.level, xp: m.xp, hp: m.hp, mp: m.mp, equip: { ...m.equip } })),
+    party: state.party.map((m) => ({ id: m.id, level: m.level, xp: m.xp, hp: m.hp, mp: m.mp, equip: { ...m.equip }, row: m.row })),
     inventory: [...state.inventory],
     gold: state.gold,
     flags: [...state.flags],
@@ -86,7 +86,8 @@ export function loadState(db: Database, d: SaveData): GameState {
     if (!def) continue;
     const equip: Partial<Record<Slot, string | null>> = {};
     for (const [slot, id] of Object.entries(p.equip ?? {})) if (id && db.equipment[id]) equip[slot as Slot] = id;
-    const m = { id: p.id, def, level: p.level, xp: p.xp, hp: p.hp, mp: p.mp, equip };
+    const row: Row = p.row === "back" || p.row === "front" ? p.row : def.row ?? "front";
+    const m = { id: p.id, def, level: p.level, xp: p.xp, hp: p.hp, mp: p.mp, equip, row };
     clampHpMp(db, m);
     s.party.push(m);
   }

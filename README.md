@@ -85,8 +85,28 @@ Steps for a new map:
 ## Battles
 
 Battles use turn gauges: each character's gauge fills based on their speed, and they act when it's full.
-Commands are **Attack**, **Skill**, **Item**, **Defend** (halves damage until your next turn) and **Run**.
-By default the gauges pause while you're choosing a command. Set `battleSettings.atbMode` to `"active"` in `src/game/battle/BattleScene.ts` for real-time pressure.
+Commands are **Attack**, **Skill**, **Item**, **Defend** (halves damage until your next turn), **Row** (switch rows; uses the turn) and **Run**.
+By default the gauges pause while you're choosing a command. You can switch this to Active in the menu's Settings.
+
+### Rows
+
+Each side has a **front row** and a **back row**, shown as columns. The front row stands nearer the middle of the screen.
+
+| Attack range | From the back row | Against a back-row target |
+|---|---|---|
+| **Melee** (most weapons, enemy claws/clubs) | half damage | half damage |
+| **Reach** (spears) | full damage | half damage |
+| **Ranged** (bows, arrows) | full damage | full damage |
+| **Magic and healing** | full | full |
+
+- If a side's whole front row is down, its back row is **exposed** and counts as front.
+- Enemies aim physical attacks at the front row more often (3 to 1).
+- **Formation** in the menu sets each character's starting row.
+- Row-based skills:
+  - `area: "row"` hits everyone in the chosen target's row (Cross Slash).
+  - `area: "pierce"` hits the target and the enemy behind it (Piercing Thrust).
+  - `knockback: true` pushes a front-row target into the back row (Shield Bash).
+  - `effect: "cover"` (Bram's Cover) takes single-target physical hits aimed at back-row allies until his next turn.
 
 All content is in `public/data/`:
 
@@ -100,6 +120,12 @@ All content is in `public/data/`:
 | `encounters.json` | Random-encounter tables: enemy groups with weights (higher = more common) |
 
 Targets are `enemy`, `all_enemies`, `ally`, `all_allies`, `self` or `ally_dead`, always seen from the user's side.
+Row-related fields:
+- `row` in `characters.json` (starting row) and `enemies.json` (where that enemy stands).
+- `range` on weapons in `equipment.json` (`melee`, `reach`, `ranged`; default melee).
+- `range` on skills (default `weapon`, which uses the equipped weapon's range), plus `area`, `knockback` and `effect` on skills.
+
+Any enemy list (encounter tables, `enemy`/`battle` map objects, `?battle=`) can place an enemy in a row with `@`, e.g. `slime@back`.
 The game checks for unknown IDs on startup and shows an error naming the bad entry.
 Damage formulas are at the top of `src/game/battle/rules.ts`; the XP curve and level-up rules are in `src/game/party.ts`. Shops sell items back for half price.
 

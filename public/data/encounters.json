@@ -5,7 +5,9 @@
       { "enemies": ["bat"], "weight": 3 },
       { "enemies": ["slime", "bat"], "weight": 3 },
       { "enemies": ["bat", "bat", "slime"], "weight": 2 },
-      { "enemies": ["goblin"], "weight": 1 }
+      { "enemies": ["goblin"], "weight": 1 },
+      { "enemies": ["goblin", "goblin_archer"], "weight": 1 },
+      { "enemies": ["slime", "slime", "goblin_archer"], "weight": 2 }
     ]
   }
 }

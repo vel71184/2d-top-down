@@ -5,6 +5,8 @@
   "silver_rod":   { "name": "Silver Rod",   "slot": "weapon",    "stats": { "atk": 2, "mag": 8 },   "price": 220, "users": ["lyra"] },
   "bronze_axe":   { "name": "Bronze Axe",   "slot": "weapon",    "stats": { "atk": 3 },             "price": 60,  "users": ["bram"] },
   "war_hammer":   { "name": "War Hammer",   "slot": "weapon",    "stats": { "atk": 9, "spd": -1 },  "price": 260, "users": ["bram"] },
+  "iron_spear":   { "name": "Iron Spear",   "slot": "weapon",    "stats": { "atk": 6 },             "price": 200, "users": ["aren", "bram"], "range": "reach", "desc": "Reach: full damage from the back row." },
+  "short_bow":    { "name": "Short Bow",    "slot": "weapon",    "stats": { "atk": 4 },             "price": 160, "users": ["aren", "lyra"], "range": "ranged", "desc": "Ranged: ignores rows entirely." },
   "leather_vest": { "name": "Leather Vest", "slot": "armor",     "stats": { "def": 2 },             "price": 50 },
   "chainmail":    { "name": "Chainmail",    "slot": "armor",     "stats": { "def": 6, "spd": -1 },  "price": 200, "users": ["aren", "bram"] },
   "silk_robe":    { "name": "Silk Robe",    "slot": "armor",     "stats": { "def": 4, "mag": 2 },   "price": 180, "users": ["lyra"] },

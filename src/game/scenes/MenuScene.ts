@@ -15,14 +15,14 @@ type Mode =
   | { m: "main" }
   | { m: "items" }
   | { m: "itemTarget"; itemId: string }
-  | { m: "pick"; purpose: "status" | "equip" }
+  | { m: "pick"; purpose: "status" | "equip" | "formation" }
   | { m: "status"; member: PartyMember }
   | { m: "equipSlots"; member: PartyMember }
   | { m: "equipChoose"; member: PartyMember; slot: Slot; options: (string | null)[] }
   | { m: "settings" }
   | { m: "save" };
 
-const MAIN = ["Items", "Equip", "Status", "Settings", "Save", "Close"];
+const MAIN = ["Items", "Equip", "Status", "Formation", "Settings", "Save", "Close"];
 const ROW_H = 44;
 const SLOT_NAMES: Record<Slot, string> = { weapon: "Weapon", armor: "Armor", accessory: "Accessory" };
 const STAT_ROWS: [keyof Stats, string][] = [["hp", "Max HP"], ["mp", "Max MP"], ["atk", "Attack"], ["def", "Defense"], ["mag", "Magic"], ["spd", "Speed"]];
@@ -77,6 +77,7 @@ export class MenuScene extends Scene {
           case "Items": return this.openItems();
           case "Equip": return this.pick("equip");
           case "Status": return this.pick("status");
+          case "Formation": return this.pick("formation");
           case "Settings": return this.openSettings();
           case "Save": return this.openSave();
           default: return this.close();
@@ -102,7 +103,10 @@ export class MenuScene extends Scene {
         if (!input.pressed("confirm")) return;
         const member = this.state.party[this.partyCursor];
         if (mode.m === "itemTarget") this.useItem(mode.itemId, member);
-        else if (mode.purpose === "status") this.mode = { m: "status", member };
+        else if (mode.purpose === "formation") {
+          member.row = member.row === "front" ? "back" : "front";
+          this.flash(`${member.def.name} moves to the ${member.row} row.`);
+        } else if (mode.purpose === "status") this.mode = { m: "status", member };
         else this.openEquipSlots(member);
         return;
       }
@@ -155,7 +159,7 @@ export class MenuScene extends Scene {
 
   // ---------------------------------------------------------------- modes
 
-  private pick(purpose: "status" | "equip"): void {
+  private pick(purpose: "status" | "equip" | "formation"): void {
     this.mode = { m: "pick", purpose };
   }
 
@@ -278,7 +282,12 @@ export class MenuScene extends Scene {
     }
 
     const help = showSub && m !== "itemTarget" ? this.sub?.current?.help : undefined;
-    const prompt = m === "itemTarget" ? "Use on whom?" : m === "pick" ? (this.mode.m === "pick" && this.mode.purpose === "equip" ? "Equip whom?" : "Whose status?") : help;
+    const pickPrompts = {
+      equip: "Equip whom?",
+      status: "Whose status?",
+      formation: "Choose someone to switch rows. Front: full melee damage. Back: safer from melee.",
+    };
+    const prompt = m === "itemTarget" ? "Use on whom?" : this.mode.m === "pick" ? pickPrompts[this.mode.purpose] : help;
     const bottom = this.message?.text ?? prompt;
     if (bottom) {
       drawPanel(ui, 8, H - 30, W - 16, 22);
@@ -321,6 +330,10 @@ export class MenuScene extends Scene {
       ctx.font = font(10);
       ctx.fillStyle = COLORS.dim;
       ctx.fillText(`Lv ${m.level}`, tx + 50, ry + 11);
+      ctx.textAlign = "right";
+      ctx.fillStyle = m.row === "back" ? COLORS.mp : COLORS.dim;
+      ctx.fillText(m.row === "back" ? "Back row" : "Front row", x + w - 10, ry + 11);
+      ctx.textAlign = "left";
       const barW = Math.max(60, Math.min(140, w - (tx - x) - 70));
       bar(ctx, tx, ry + 22, barW, "HP", m.hp, st.hp, m.hp / st.hp < 0.25 ? COLORS.hpLow : COLORS.hp);
       bar(ctx, tx, ry + 34, barW, "MP", m.mp, st.mp, COLORS.mp);

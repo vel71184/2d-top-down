@@ -1,4 +1,4 @@
-import type { CharacterDef, Database, Slot } from "./data";
+import type { CharacterDef, Database, Row, Slot } from "./data";
 import { memberStats } from "./party";
 
 /** A character in the player's party, with their current condition. */
@@ -11,6 +11,8 @@ export interface PartyMember {
   hp: number;
   mp: number;
   equip: Partial<Record<Slot, string | null>>;
+  /** Battle row (set in the menu's Formation screen). */
+  row: Row;
 }
 
 /** Everything that changes as you play. This is what gets saved (see save.ts). */
@@ -28,7 +30,7 @@ export class GameState {
     const s = new GameState();
     s.party = db.startingParty.map((id) => {
       const def = db.characters[id];
-      const m: PartyMember = { id, def, level: 1, xp: 0, hp: 0, mp: 0, equip: { ...def.equip } };
+      const m: PartyMember = { id, def, level: 1, xp: 0, hp: 0, mp: 0, equip: { ...def.equip }, row: def.row ?? "front" };
       const st = memberStats(db, m);
       m.hp = st.hp;
       m.mp = st.mp;

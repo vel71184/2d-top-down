@@ -1,5 +1,5 @@
 import type { SpriteSheet } from "../../engine/sprite";
-import type { EnemyDef, Stats } from "../data";
+import type { EnemyDef, Range, Row, Stats } from "../data";
 import type { PartyMember } from "../state";
 
 export type Side = "party" | "enemy";
@@ -13,12 +13,22 @@ export class Battler {
   defending = false;
   /** Enemy has picked an action and is waiting for it to run. */
   queued = false;
+  /** Battle row. */
+  row: Row = "front";
+  /** Position within the row (top to bottom), used for layout and "pierce". */
+  lane = 0;
+  /** Range of the equipped weapon (enemies: melee unless a skill says otherwise). */
+  weaponRange: Range = "melee";
+  /** Cover is active: takes single-target physical hits aimed at back-row allies until this battler's next turn. */
+  covering = false;
 
   // ---- visuals ----
   /** Feet position on screen (UI units). */
   homeX = 0;
   homeY = 0;
   offsetX = 0;
+  /** Drawn x position; glides toward homeX when changing rows. */
+  visualX = NaN;
   flash = 0;
   shake = 0;
   fade = 1;
@@ -73,11 +83,16 @@ export class Battler {
   /** Screen rectangle used for taps and effects. */
   get bounds(): { x: number; y: number; w: number; h: number } {
     const { w, h } = this.size;
-    return { x: this.homeX + this.offsetX - w / 2, y: this.homeY - h, w, h };
+    return { x: this.drawX - w / 2, y: this.homeY - h, w, h };
+  }
+
+  /** Current on-screen x of the feet (row glide + step-forward). */
+  get drawX(): number {
+    return (Number.isNaN(this.visualX) ? this.homeX : this.visualX) + this.offsetX;
   }
 
   get centerX(): number {
-    return this.homeX + this.offsetX;
+    return this.drawX;
   }
   get centerY(): number {
     return this.homeY - this.size.h / 2;

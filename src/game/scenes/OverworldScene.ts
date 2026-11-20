@@ -6,6 +6,7 @@ import type { Rect } from "../../engine/physics";
 import { TileMap, type MapObject } from "../../engine/tilemap";
 import { BattleScene, type BattleOptions, type BattleResult } from "../battle/BattleScene";
 import type { RPG } from "../context";
+import { parseEnemyRef } from "../data";
 import { Player } from "../entities/Player";
 import { ChoiceScene } from "./ChoiceScene";
 import { GameOverScene } from "./GameOverScene";
@@ -146,7 +147,7 @@ export class OverworldScene extends Scene {
       const flag = `defeated:${mapName}:${obj.id}`;
       if (this.rpg.state.flags.has(flag)) continue;
       const ids = enemyList(obj);
-      const def = this.rpg.db.enemies[ids[0]];
+      const def = this.rpg.db.enemies[parseEnemyRef(ids[0]).id];
       if (!def) throw new Error(`Map "${mapName}": enemy object ${obj.id} has unknown enemy "${ids[0]}"`);
       const image = await loadImage(assetUrl(`assets/enemies/${String(obj.props.image ?? def.image)}`));
       out.push({ obj, image, flag });

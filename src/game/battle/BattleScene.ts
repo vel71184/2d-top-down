@@ -1,12 +1,14 @@
 import { assetUrl, loadImage } from "../../engine/assets";
 import { Scene } from "../../engine/scene";
 import type { RPG } from "../context";
-import type { TargetType } from "../data";
+import { parseEnemyRef, type Area, type Row, type TargetType } from "../data";
 import { gainXp, memberStats, skillsOf } from "../party";
 import { Menu, type MenuItem } from "../ui/Menu";
 import { COLORS, drawPanel, font, outlinedText } from "../ui/theme";
 import { Battler } from "./Battler";
-import { candidates, chooseEnemyAction, isMultiTarget, resolveItem, resolveSkill, type Outcome } from "./rules";
+import {
+  areaTargets, candidates, chooseEnemyAction, coverFor, isMultiTarget, resolveItem, resolveSkill, type Outcome,
+} from "./rules";
 
 export type BattleResult = "victory" | "defeat" | "fled";
 
@@ -23,15 +25,24 @@ export type AtbMode = "wait" | "active";
 export const battleSettings: { atbMode: AtbMode } = { atbMode: "wait" };
 
 type Action =
-  | { kind: "skill"; user: Battler; id: string; targets: Battler[] }
-  | { kind: "item"; user: Battler; id: string; targets: Battler[] }
+  /** `primary` is the target that was picked; `targets` adds whoever the skill's area also hits. */
+  | { kind: "skill"; user: Battler; id: string; targets: Battler[]; primary?: Battler }
+  | { kind: "item"; user: Battler; id: string; targets: Battler[]; primary?: Battler }
+  | { kind: "row"; user: Battler }
   | { kind: "run"; user: Battler };
 
 type Mode =
   | { m: "command" }
   | { m: "skill" }
   | { m: "item" }
-  | { m: "target"; type: TargetType; back: "command" | "skill" | "item"; index: number; make: (targets: Battler[]) => Action };
+  | {
+      m: "target";
+      type: TargetType;
+      area?: Area;
+      back: "command" | "skill" | "item";
+      index: number;
+      make: (targets: Battler[], primary: Battler) => Action;
+    };
 
 interface Popup { text: string; x: number; y: number; t: number; color: string; size: number }
 interface Effect { kind: "slash" | "burst" | "sparkle"; x: number; y: number; t: number; color: string }
@@ -41,16 +52,6 @@ const STEP_OUT = 0.18;
 const HIT_AT = 0.4;
 const ACTION_END = 1.0;
 const FADE_SPEED = 3;
-
-/** Enemy positions for 1..6 enemies, in cells relative to the centre of the enemy side. */
-const FORMATIONS: [number, number][][] = [
-  [[0, 0]],
-  [[0.5, -0.4], [-0.5, 0.4]],
-  [[0.5, -0.8], [-0.5, 0], [0.5, 0.8]],
-  [[0.7, -0.8], [-0.3, -0.8], [0.3, 0.8], [-0.7, 0.8]],
-  [[1, -0.8], [0, -0.8], [-1, -0.8], [0.5, 0.8], [-0.5, 0.8]],
-  [[1, -0.8], [0, -0.8], [-1, -0.8], [1, 0.8], [0, 0.8], [-1, 0.8]],
-];
 
 const ELEMENT_COLORS: Record<string, string> = { fire: "#ff8a3a", ice: "#7fe0ff", thunder: "#fff06a" };
 
@@ -95,15 +96,23 @@ export class BattleScene extends Scene {
     const { db, state, sprites } = this.rpg;
     this.game.input.reset();
 
-    for (const m of state.party) {
+    state.party.forEach((m, i) => {
       const d = m.def;
       const stats = memberStats(db, m); // level + equipment
-      this.battlers.push(new Battler("party", d.name, stats, m.hp, m.mp, skillsOf(db, m), m, undefined, sprites.get(d.sprite)));
-    }
+      const b = new Battler("party", d.name, stats, m.hp, m.mp, skillsOf(db, m), m, undefined, sprites.get(d.sprite));
+      b.row = m.row;
+      b.lane = i;
+      const weapon = m.equip.weapon ? db.equipment[m.equip.weapon] : undefined;
+      b.weaponRange = weapon?.range ?? "melee";
+      this.battlers.push(b);
+    });
+    const refs = this.enemyIds.map(parseEnemyRef);
     const counts = new Map<string, number>();
-    for (const id of this.enemyIds) counts.set(id, (counts.get(id) ?? 0) + 1);
+    for (const { id } of refs) counts.set(id, (counts.get(id) ?? 0) + 1);
     const seen = new Map<string, number>();
-    for (const id of this.enemyIds) {
+    const lanes: Record<Row, number> = { front: 0, back: 0 };
+    for (const ref of refs) {
+      const id = ref.id;
       const def = db.enemies[id];
       if (!def) throw new Error(`Unknown enemy "${id}" (check public/data/enemies.json)`);
       const img = await loadImage(assetUrl(`assets/enemies/${def.image}`));
@@ -111,7 +120,10 @@ export class BattleScene extends Scene {
       const n = (seen.get(id) ?? 0) + 1;
       seen.set(id, n);
       const name = (counts.get(id) ?? 0) > 1 ? `${def.name} ${String.fromCharCode(64 + n)}` : def.name;
-      this.battlers.push(new Battler("enemy", name, def.stats, def.stats.hp, def.stats.mp, [], undefined, def, undefined, img));
+      const b = new Battler("enemy", name, def.stats, def.stats.hp, def.stats.mp, [], undefined, def, undefined, img);
+      b.row = ref.row ?? def.row ?? "front";
+      b.lane = lanes[b.row]++;
+      this.battlers.push(b);
     }
     for (const b of this.battlers) b.worldScale = this.game.display.worldScale;
   }
@@ -155,13 +167,14 @@ export class BattleScene extends Scene {
       if (!b.alive || b.queued || this.ready.includes(b)) continue;
       b.atb = Math.min(1, b.atb + b.fillRate * dt);
       if (b.atb < 1) continue;
-      b.defending = false; // defending lasts until your next turn
+      b.defending = false; // defending and cover last until your next turn
+      b.covering = false;
       if (b.side === "party") {
         this.ready.push(b);
       } else {
         const choice = chooseEnemyAction(b, this.battlers, this.rpg.db);
         if (choice) {
-          this.actions.push({ kind: "skill", user: b, id: choice.skill, targets: choice.targets });
+          this.actions.push({ kind: "skill", user: b, id: choice.skill, targets: choice.targets, primary: choice.primary });
           b.queued = true;
         } else b.atb = 0;
       }
@@ -172,6 +185,9 @@ export class BattleScene extends Scene {
     for (const b of this.battlers) {
       b.flash = Math.max(0, b.flash - dt);
       b.shake = Math.max(0, b.shake - dt * 3);
+      // Glide to a new row
+      if (Number.isNaN(b.visualX)) b.visualX = b.homeX;
+      else b.visualX += (b.homeX - b.visualX) * Math.min(1, dt * 8);
       if (b.side === "enemy" && !b.alive) b.fade = Math.max(0, b.fade - dt * 2);
       else if (b.alive) b.fade = 1;
     }
@@ -201,6 +217,7 @@ export class BattleScene extends Scene {
       { label: "Skill", disabled: b.skills.length === 0 },
       { label: "Item", disabled: !hasItems },
       { label: "Defend" },
+      { label: "Row" },
       { label: "Run", disabled: this.options.canFlee === false },
     ];
     this.commandMenu = this.placeMenu(new Menu(items, 0, 0, 0, 0, 2, 22));
@@ -219,7 +236,7 @@ export class BattleScene extends Scene {
       if (r?.type !== "select") return;
       switch (r.index) {
         case 0:
-          this.beginTarget("enemy", "command", (t) => ({ kind: "skill", user, id: "attack", targets: t }));
+          this.beginTarget("enemy", undefined, "command", (t, p) => ({ kind: "skill", user, id: "attack", targets: t, primary: p }));
           break;
         case 1:
           this.listIds = user.skills;
@@ -249,6 +266,10 @@ export class BattleScene extends Scene {
           this.openCommand();
           break;
         case 4:
+          // Changing rows takes this character's turn.
+          this.commit({ kind: "row", user });
+          break;
+        case 5:
           this.commit({ kind: "run", user });
           break;
       }
@@ -262,10 +283,10 @@ export class BattleScene extends Scene {
       const id = this.listIds[r.index];
       if (mode.m === "skill") {
         const skill = db.skills[id];
-        this.beginTarget(skill.target, "skill", (t) => ({ kind: "skill", user, id, targets: t }));
+        this.beginTarget(skill.target, skill.area, "skill", (t, p) => ({ kind: "skill", user, id, targets: t, primary: p }));
       } else {
         const item = db.items[id];
-        this.beginTarget(item.target, "item", (t) => ({ kind: "item", user, id, targets: t }));
+        this.beginTarget(item.target, undefined, "item", (t, p) => ({ kind: "item", user, id, targets: t, primary: p }));
       }
       return;
     }
@@ -275,11 +296,10 @@ export class BattleScene extends Scene {
       if (pool.length === 0) return this.backFromTarget(mode.back);
       mode.index = Math.min(mode.index, pool.length - 1);
       if (input.pressed("cancel")) return this.backFromTarget(mode.back);
-      const multi = isMultiTarget(mode.type);
       const nav = input.nav();
       if (nav === "up" || nav === "left") mode.index = (mode.index - 1 + pool.length) % pool.length;
       if (nav === "down" || nav === "right") mode.index = (mode.index + 1) % pool.length;
-      if (input.pressed("confirm")) this.commit(mode.make(multi ? pool : [pool[mode.index]]));
+      if (input.pressed("confirm")) this.commit(mode.make(this.pickedTargets(mode, pool), pool[mode.index]));
     }
   }
 
@@ -288,15 +308,27 @@ export class BattleScene extends Scene {
     return [...this.rpg.state.inventory.keys()].filter((id) => this.rpg.db.items[id]);
   }
 
-  private beginTarget(type: TargetType, back: "command" | "skill" | "item", make: (t: Battler[]) => Action): void {
+  /** Everyone hit if the current target choice is confirmed (all-targets, row and pierce included). */
+  private pickedTargets(mode: Extract<Mode, { m: "target" }>, pool: Battler[]): Battler[] {
+    if (isMultiTarget(mode.type)) return pool;
+    const primary = pool[mode.index];
+    return primary ? areaTargets(mode.area, primary, pool) : [];
+  }
+
+  private beginTarget(
+    type: TargetType,
+    area: Area | undefined,
+    back: "command" | "skill" | "item",
+    make: (t: Battler[], primary: Battler) => Action,
+  ): void {
     const user = this.ready[0];
-    if (type === "self") return this.commit(make([user]));
+    if (type === "self") return this.commit(make([user], user));
     const pool = candidates(type, user, this.battlers);
     if (pool.length === 0) return; // nothing valid (e.g. no one to revive)
     // Healing defaults to the most hurt ally.
     let index = 0;
     if (type === "ally") index = pool.reduce((best, b, i) => (b.hp / b.stats.hp < pool[best].hp / pool[best].stats.hp ? i : best), 0);
-    this.mode = { m: "target", type, back, index, make };
+    this.mode = { m: "target", type, area, back, index, make };
   }
 
   private backFromTarget(back: "command" | "skill" | "item"): void {
@@ -320,17 +352,20 @@ export class BattleScene extends Scene {
       a.user.queued = false;
       return;
     }
-    if (a.kind !== "run") {
+    if (a.kind === "skill" || a.kind === "item") {
       const def = a.kind === "skill" ? this.rpg.db.skills[a.id] : this.rpg.db.items[a.id];
+      const area = a.kind === "skill" ? this.rpg.db.skills[a.id].area : undefined;
       const pool = candidates(def.target, a.user, this.battlers);
       if (isMultiTarget(def.target)) a.targets = pool;
-      else if (!a.targets.every((t) => pool.includes(t))) {
-        // Original target fell: pick another.
-        a.targets = pool.length ? [pool[Math.floor(Math.random() * pool.length)]] : [];
+      else {
+        // If the picked target fell, pick another; then re-apply the area (rows may have changed).
+        let primary = a.primary && pool.includes(a.primary) ? a.primary : undefined;
+        if (!primary && pool.length) primary = pool[Math.floor(Math.random() * pool.length)];
+        a.targets = primary ? areaTargets(area, primary, pool) : [];
       }
       if (a.id !== "attack") this.banner = { text: def.name, t: 0 };
     } else {
-      this.banner = { text: "Run", t: 0 };
+      this.banner = { text: a.kind === "row" ? "Change Row" : "Run", t: 0 };
     }
     this.current = { a, t: 0, hit: false };
   }
@@ -360,6 +395,12 @@ export class BattleScene extends Scene {
 
   private applyAction(a: Action): void {
     const { db } = this.rpg;
+    if (a.kind === "row") {
+      a.user.row = a.user.row === "front" ? "back" : "front";
+      if (a.user.side === "enemy") a.user.lane = this.nextLane(a.user.row);
+      this.popup(a.user, a.user.row === "front" ? "Front row" : "Back row", COLORS.mp, 10);
+      return;
+    }
     if (a.kind === "run") {
       const avg = (bs: Battler[]) => bs.reduce((s, b) => s + b.stats.spd, 0) / Math.max(1, bs.length);
       const chance = Math.max(0.15, Math.min(0.95, 0.55 + (avg(this.party.filter((b) => b.alive)) - avg(this.enemies.filter((b) => b.alive))) * 0.03));
@@ -380,10 +421,19 @@ export class BattleScene extends Scene {
     let color = "#ffffff";
     if (a.kind === "skill") {
       const skill = db.skills[a.id];
-      outcomes = resolveSkill(a.user, skill, a.targets);
+      // Cover: a covering ally steps in front of a back-row target.
+      if (a.targets.length === 1) {
+        const coverer = coverFor(a.targets[0], skill, this.battlers);
+        if (coverer) {
+          this.popup(coverer, "Cover!", COLORS.mp, 10, -14);
+          a.targets = [coverer];
+        }
+      }
+      outcomes = resolveSkill(a.user, skill, a.targets, this.battlers);
       color = skill.type === "heal" ? COLORS.heal : ELEMENT_COLORS[skill.element ?? ""] ?? (skill.type === "magic" ? "#c8a0ff" : "#ffffff");
-      for (const t of a.targets)
-        this.effects.push({ kind: skill.type === "heal" ? "sparkle" : skill.type === "magic" ? "burst" : "slash", x: t.centerX, y: t.centerY, t: 0, color });
+      if (skill.type !== "support")
+        for (const t of a.targets)
+          this.effects.push({ kind: skill.type === "heal" ? "sparkle" : skill.type === "magic" ? "burst" : "slash", x: t.centerX, y: t.centerY, t: 0, color });
     } else {
       outcomes = resolveItem(db.items[a.id], a.targets);
       for (const t of a.targets) this.effects.push({ kind: "sparkle", x: t.centerX, y: t.centerY, t: 0, color: COLORS.heal });
@@ -397,6 +447,14 @@ export class BattleScene extends Scene {
           if (o.weak) this.popup(o.target, "Weak!", "#ff9a5a", 9, -14);
           if (o.resist) this.popup(o.target, "Resist", COLORS.dim, 9, -14);
           if (o.crit) this.popup(o.target, "Critical!", COLORS.accent, 9, -14);
+          else if (o.far) this.popup(o.target, "Too far", COLORS.dim, 9, -14);
+          if (o.knockedBack) {
+            o.target.lane = this.nextLane("back", o.target.side);
+            this.popup(o.target, "Knocked back!", "#ff9a5a", 9, -26);
+          }
+          break;
+        case "status":
+          this.popup(o.target, o.label ?? "", COLORS.mp, 11);
           break;
         case "heal":
           this.popup(o.target, `+${o.amount}`, COLORS.heal, 13);
@@ -418,6 +476,12 @@ export class BattleScene extends Scene {
         this.actions = this.actions.filter((x) => x.user !== o.target);
       }
     }
+  }
+
+  /** A free lane at the end of a row (for battlers moving into it). */
+  private nextLane(row: Row, side: "party" | "enemy" = "enemy"): number {
+    const inRow = this.battlers.filter((b) => b.side === side && b.row === row);
+    return inRow.reduce((m, b) => Math.max(m, b.lane + 1), 0);
   }
 
   private checkEnd(): void {
@@ -476,19 +540,24 @@ export class BattleScene extends Scene {
 
   private layout(W: number, H: number): void {
     this.panelTop = H - 78;
-    this.party.forEach((b, i) => {
-      b.homeX = W - 62 + (i - 1) * 10;
-      b.homeY = 66 + i * 38;
+    // Rows are columns: the front row stands nearer the middle of the screen.
+    this.party.forEach((b) => {
+      b.homeX = b.row === "front" ? W - 84 : W - 46;
+      b.homeY = 66 + b.lane * 38;
     });
-    const es = this.enemies;
-    const slots = FORMATIONS[Math.min(es.length, FORMATIONS.length) - 1] ?? [];
-    const cellW = Math.min(80, W * 0.15), cellH = 44;
-    es.forEach((b, i) => {
-      // Beyond 6 enemies, extras wrap into a further-back row.
-      const [sx, sy] = slots[i] ?? [-1.5 - Math.floor((i - 6) / 2) * 0.5, (i % 2 ? 0.8 : -0.8)];
-      b.homeX = Math.round(W * 0.3 + sx * cellW);
-      b.homeY = Math.round(116 + sy * cellH);
-    });
+    const colW = Math.min(84, W * 0.18);
+    for (const row of ["front", "back"] as const) {
+      const inRow = this.enemies.filter((b) => b.row === row).sort((a, b) => a.lane - b.lane);
+      const n = inRow.length;
+      // Spread the row over the battlefield height (feet between y=70 and y=160).
+      const spacing = n > 1 ? Math.min(62, 90 / (n - 1)) : 0;
+      inRow.forEach((b, k) => {
+        const x = W * 0.36 - (row === "back" ? colW : 0);
+        // a slight zig-zag so neighbours overlap less
+        b.homeX = Math.round(x + (k % 2 ? -8 : 8));
+        b.homeY = Math.round(115 + (k - (n - 1) / 2) * spacing);
+      });
+    }
   }
 
   render(world: CanvasRenderingContext2D, ui: CanvasRenderingContext2D): void {
@@ -556,14 +625,14 @@ export class BattleScene extends Scene {
     if (b.flash > 0 && Math.floor(this.time * 30) % 2 === 0) return; // blink when hit / acting
     const { w, h } = b.size;
     const shakeX = b.shake > 0 ? Math.sin(this.time * 70) * 3 * b.shake : 0;
-    const x = Math.round(b.homeX + b.offsetX - w / 2 + shakeX);
+    const x = Math.round(b.drawX - w / 2 + shakeX);
     const y = Math.round(b.homeY - h);
     ctx.save();
     ctx.globalAlpha = b.fade * (b.side === "party" && !b.alive ? 0.4 : 1);
     // shadow
     ctx.fillStyle = "rgba(0,0,0,0.25)";
     ctx.beginPath();
-    ctx.ellipse(b.homeX + b.offsetX, b.homeY - 1, w * 0.32, 3, 0, 0, Math.PI * 2);
+    ctx.ellipse(b.drawX, b.homeY - 1, w * 0.32, 3, 0, 0, Math.PI * 2);
     ctx.fill();
     if (b.sprite) {
       const choosing = this.ready[0] === b && this.phase === "fight";
@@ -613,7 +682,7 @@ export class BattleScene extends Scene {
     const user = this.ready[0];
     if (mode?.m !== "target" || !user) return;
     const pool = candidates(mode.type, user, this.battlers);
-    const targets = isMultiTarget(mode.type) ? pool : pool.slice(mode.index, mode.index + 1);
+    const targets = this.pickedTargets(mode, pool);
     const bob = Math.sin(this.time * 8) * 2;
     ctx.save();
     ctx.font = font(12, true);
@@ -630,7 +699,11 @@ export class BattleScene extends Scene {
     else if (mode?.m === "target") {
       const user = this.ready[0];
       const pool = user ? candidates(mode.type, user, this.battlers) : [];
-      text = isMultiTarget(mode.type) ? (mode.type === "all_enemies" ? "All enemies" : "All allies") : pool[mode.index]?.name ?? null;
+      const p = pool[mode.index];
+      if (isMultiTarget(mode.type)) text = mode.type === "all_enemies" ? "All enemies" : "All allies";
+      else if (p && mode.area === "row") text = p.row === "front" ? "Front row" : "Back row";
+      else if (p && mode.area === "pierce") text = user ? this.pickedTargets(mode, pool).map((b) => b.name).join(" + ") : p.name;
+      else text = p ? `${p.name}${p.row === "back" ? "  (back row)" : ""}` : null;
     } else if ((mode?.m === "skill" || mode?.m === "item") && this.listMenu?.current?.help) {
       text = this.listMenu.current.help;
     }
@@ -663,8 +736,13 @@ export class BattleScene extends Scene {
       this.placeMenu(menu).render(ctx, this.mode?.m !== "target");
     } else {
       drawPanel(ctx, 4, top, leftW, ph);
+      // e.g. "Slime ×2", "Goblin Archer · back"
       const names = new Map<string, number>();
-      for (const e of this.enemies) if (e.alive) names.set(e.enemy!.name, (names.get(e.enemy!.name) ?? 0) + 1);
+      for (const e of this.enemies) {
+        if (!e.alive) continue;
+        const key = e.enemy!.name + (e.row === "back" ? "  · back" : "");
+        names.set(key, (names.get(key) ?? 0) + 1);
+      }
       ctx.font = font(11);
       ctx.fillStyle = COLORS.text;
       ctx.textAlign = "left";
@@ -684,10 +762,12 @@ export class BattleScene extends Scene {
       ctx.font = font(11, b === active);
       ctx.fillStyle = !b.alive ? COLORS.hpLow : b === active ? COLORS.accent : COLORS.text;
       ctx.fillText(b.name, sx + 8, y);
-      if (b.defending) {
-        ctx.font = font(8);
+      // Small tags: back row, defending, covering
+      const tags = [b.row === "back" ? "BACK" : "", b.defending ? "DEF" : "", b.covering ? "COVER" : ""].filter(Boolean);
+      if (tags.length) {
+        ctx.font = font(7);
         ctx.fillStyle = COLORS.mp;
-        ctx.fillText("DEF", sx + 46, y);
+        ctx.fillText(tags.join(" "), sx + 8, y + 9);
       }
       // HP
       const hpX = sx + Math.round(sw * 0.3);

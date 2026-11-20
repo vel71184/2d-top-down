@@ -359,7 +359,28 @@ function save(path, img) {
 }
 save("public/assets/tilesets/overworld.png", ts);
 for (const [name, img] of Object.entries(sheets)) save(`public/assets/sprites/${name}.png`, img);
-for (const [name, make] of [["slime", enemySlime], ["bat", enemyBat], ["goblin", enemyGoblin]]) {
+function enemyGoblinArcher() {
+  const img = image(E, E);
+  rect(img, 7, 29, 18, 2, [0, 0, 0, 70]);
+  rect(img, 11, 24, 4, 5, "#3a2a18"); rect(img, 17, 24, 4, 5, "#3a2a18");
+  rect(img, 9, 15, 14, 10, "#3f6a3a"); // green hood-cloak
+  rect(img, 9, 20, 14, 2, "#2c4a28");
+  rect(img, 6, 16, 3, 7, "#5aa04a");
+  // bow (curved) and string on the left
+  for (let i = 0; i < 16; i++) pset(img, 3 + Math.round(Math.sin((i / 15) * Math.PI) * -2) + 2, 8 + i, "#8a5a2e");
+  rect(img, 5, 8, 0.5, 16, "#e8e0c8");
+  // quiver on the back
+  rect(img, 22, 10, 3, 9, "#6b4423"); rect(img, 22, 8, 1, 2, "#e8e0c8"); rect(img, 24, 8, 1, 2, "#e8e0c8");
+  rect(img, 10, 5, 12, 10, "#6ab85a");
+  rect(img, 9, 3, 14, 4, "#3f6a3a"); // hood
+  rect(img, 6, 7, 4, 3, "#6ab85a"); rect(img, 22, 7, 4, 3, "#6ab85a");
+  rect(img, 12, 9, 2, 2, "#ff6a3a"); rect(img, 18, 9, 2, 2, "#ff6a3a");
+  pset(img, 13, 10, OUT); pset(img, 19, 10, OUT);
+  rect(img, 13, 13, 6, 1, "#2f5a28");
+  return img;
+}
+
+for (const [name, make] of [["slime", enemySlime], ["bat", enemyBat], ["goblin", enemyGoblin], ["goblin_archer", enemyGoblinArcher]]) {
   const img = make();
   outline(img, 0, 0, E, E);
   save(`public/assets/enemies/${name}.png`, img);
